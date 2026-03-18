@@ -1,0 +1,26 @@
+[
+  {
+    "id": "billing_invoice",
+    "language": "ro",
+    "question": "Cum pot primi factura?",
+    "answer": "Poți primi factura pe email în maximum 24 de ore după confirmarea plății."
+  },
+  {
+    "id": "billing_invoice_en",
+    "language": "en",
+    "question": "How can I get my invoice?",
+    "answer": "You can receive your invoice by email within 24 hours after payment confirmation."
+  },
+  {
+    "id": "delivery_time_ro",
+    "language": "ro",
+    "question": "In cat timp ajunge comanda?",
+    "answer": "Comenzile ajung de obicei în 1-3 zile lucrătoare."
+  },
+  {
+    "id": "delivery_time_en",
+    "language": "en",
+    "question": "How long does delivery take?",
+    "answer": "Orders typically arrive in 1-3 business days."
+  }
+]
