@@ -370,3 +370,15 @@ def test_website_context_url_is_used_when_needed():
     finally:
         research.inspect_url = original_method
         settings.website_context_url = original_url
+
+
+def test_restaurant_demo_reply_is_concrete_and_actionable():
+    res = client.post(
+        "/api/simulate-turn",
+        json={"session_id": "demo-restaurant", "user_text": "Fă-mi un demo pentru rezervare la restaurant"},
+    )
+    assert res.status_code == 200
+    answer = res.json()["answer"].lower()
+    assert "4 persoane" in answer or "4 guests" in answer
+    assert "19:30" in answer or "7:30" in answer
+    assert "sms" in answer

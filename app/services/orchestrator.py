@@ -76,9 +76,40 @@ class MockLLMProvider:
 
 
     @staticmethod
-    def _demo_reply(user_text: str, language: str) -> str:
+    def _demo_reply(user_text: str, language: str, context: dict | None = None) -> str:
         lowered = user_text.lower()
         niche = "your business"
+        website_summary = ""
+        if isinstance(context, dict):
+            website_summary = (context.get("website_context") or {}).get("summary", "")
+
+        restaurant_markers = ["restaurant", "rezerv", "masa", "booking", "table", "menu"]
+        if any(marker in lowered for marker in restaurant_markers):
+            if language == "ro":
+                base = (
+                    "Sigur — iată un demo scurt și natural pentru rezervare la restaurant. "
+                    "Client: «Bună, vreau o masă pentru 4 persoane vineri la 19:30.» "
+                    "Agent: «Sigur, te ajut imediat. Confirm rezervarea pentru 4 persoane, vineri, la 19:30. "
+                    "Pe ce nume fac rezervarea?» "
+                    "Client: «Pe numele Andrei.» "
+                    "Agent: «Perfect. Am notat rezervarea pe numele Andrei și îți trimit acum un SMS de confirmare cu data, ora și numărul de persoane.»"
+                )
+                if website_summary:
+                    return f"{base} Pe site am văzut și context util: {website_summary[:180]}"
+                return base
+
+            base = (
+                "Sure — here is a short, natural restaurant reservation demo. "
+                "Customer: «Hi, I need a table for 4 on Friday at 7:30 PM.» "
+                "Agent: «Absolutely, I can help with that. I’m confirming a reservation for 4 guests on Friday at 7:30 PM. "
+                "What name should I place it under?» "
+                "Customer: «Andrei.» "
+                "Agent: «Perfect. I’ve noted the booking under Andrei and I’m sending an SMS confirmation now with the date, time, and party size.»"
+            )
+            if website_summary:
+                return f"{base} I also checked the configured website and found: {website_summary[:180]}"
+            return base
+
         if language == "ro":
             for marker in ["pentru ", "despre "]:
                 if marker in lowered:
@@ -99,10 +130,10 @@ class MockLLMProvider:
         )
 
     @staticmethod
-    def _natural_reply(user_text: str, language: str, skill_instruction: str | None) -> str:
+    def _natural_reply(user_text: str, language: str, skill_instruction: str | None, context: dict | None = None) -> str:
         lowered = user_text.lower()
         if "demo" in lowered or "demonstra" in lowered or "demonstre" in lowered:
-            return MockLLMProvider._demo_reply(user_text, language)
+            return MockLLMProvider._demo_reply(user_text, language, context)
 
         if language == "ro":
             if skill_instruction and "SALES" in skill_instruction:
@@ -161,7 +192,7 @@ class MockLLMProvider:
             citation = f" (Sursă: {kb_match.source})" if language == "ro" else f" (Source: {kb_match.source})"
             return f"{grounded}{citation}"
 
-        return self._natural_reply(user_text, language, skill_instruction)
+        return self._natural_reply(user_text, language, skill_instruction, context)
 
 
 class OpenAILLMProvider:
