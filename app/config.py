@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     twilio_sms_from_number: str = ""
     twilio_voice_en: str = "Polly.Amy-Neural"
     twilio_voice_ro: str = "Google.ro-RO-Wavenet-B"
+    tts_provider_ro: str = "elevenlabs"  # twilio | elevenlabs
+    elevenlabs_api_key: str = ""
+    elevenlabs_voice_id_ro: str = "EXAVITQu4vr4xnSDxMaL"
+    elevenlabs_model_id: str = "eleven_multilingual_v2"
+    elevenlabs_output_format: str = "mp3_44100_128"
 
     # Conversation behavior
     behavior_style_en: str = "Warm, friendly, concise, and natural. Use short sentences and empathy."

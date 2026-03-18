@@ -1,8 +1,7 @@
-from html import escape
 import re
 
-from fastapi import FastAPI, Form
-from fastapi.responses import PlainTextResponse
+from fastapi import FastAPI, Form, HTTPException
+from fastapi.responses import PlainTextResponse, Response
 
 from app.config import settings
 from app.models import (
@@ -41,14 +40,6 @@ tools = ToolClient(db_client, crm_client, telephony, calendar, research)
 def build_intro(language: str) -> str:
     template = settings.greeting_ro if language == "ro" else settings.greeting_en
     return template.format(agent_name=settings.agent_name, business_name=settings.business_name)
-
-
-def twilio_voice_for_language(language: str) -> str:
-    return settings.twilio_voice_ro if language == "ro" else settings.twilio_voice_en
-
-
-def xml_safe(text: str) -> str:
-    return escape(text, quote=False)
 
 
 def gather_loop(language_code: str) -> str:
@@ -328,19 +319,20 @@ async def twilio_voice(
         lang_code = settings.twilio_default_language
         lang = "ro" if lang_code.startswith("ro") else "en"
         intro = build_intro(lang)
+        speech_verb = await telephony.twiml_verb(intro, lang)
         return (
             '<?xml version="1.0" encoding="UTF-8"?>'
-            f'<Response><Say voice="{twilio_voice_for_language(lang)}" language="{lang_code}">{xml_safe(intro)}</Say>'
+            f"<Response>{speech_verb}"
             f"{gather_loop(lang_code)}"
             "</Response>"
         )
 
     result = await build_turn_response(session_id, SpeechResult)
     lang_code = "ro-RO" if result.language == "ro" else "en-US"
+    speech_verb = await telephony.twiml_verb(result.answer, result.language)
     return (
         '<?xml version="1.0" encoding="UTF-8"?>'
-        f'<Response><Say voice="{twilio_voice_for_language(result.language)}" language="{lang_code}">'
-        f"{xml_safe(result.answer)}</Say>"
+        f"<Response>{speech_verb}"
         f"{gather_loop(lang_code)}"
         "</Response>"
     )
@@ -349,3 +341,11 @@ async def twilio_voice(
 @app.post("/twilio/outbound")
 async def outbound_call(payload: TwilioOutboundRequest) -> dict:
     return await telephony.create_outbound_call(payload.to_number, payload.message, payload.language)
+
+
+@app.get("/api/tts/{token}")
+async def get_tts_audio(token: str) -> Response:
+    item = telephony.audio_store.get(token)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Audio clip not found or expired.")
+    return Response(content=item["content"], media_type=item["media_type"])

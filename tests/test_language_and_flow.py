@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from app.main import app, kb
+from app.main import app, kb, telephony
 
 
 client = TestClient(app)
@@ -285,3 +285,35 @@ def test_default_romanian_twilio_voice_uses_wavenet():
     from app.config import settings
 
     assert settings.twilio_voice_ro == "Google.ro-RO-Wavenet-B"
+
+
+def test_twilio_initial_prompt_uses_elevenlabs_play_for_romanian_when_configured():
+    from app.config import settings
+
+    original_api_key = settings.elevenlabs_api_key
+    original_provider = settings.tts_provider_ro
+    original_method = telephony.tts_client.synthesize
+
+    async def fake_synthesize(text: str, language: str):
+        return b"fake-mp3", "cache-key"
+
+    settings.elevenlabs_api_key = "test-key"
+    settings.tts_provider_ro = "elevenlabs"
+    telephony.tts_client.synthesize = fake_synthesize
+    try:
+        res = client.post("/twilio/voice", data={"CallSid": "CA-EL-1", "SpeechResult": ""})
+        assert res.status_code == 200
+        assert "<Play>" in res.text
+        assert "/api/tts/" in res.text
+    finally:
+        telephony.tts_client.synthesize = original_method
+        settings.elevenlabs_api_key = original_api_key
+        settings.tts_provider_ro = original_provider
+
+
+def test_tts_audio_endpoint_returns_cached_audio():
+    token = telephony.audio_store.put(b"audio-bytes")
+    res = client.get(f"/api/tts/{token}")
+    assert res.status_code == 200
+    assert res.content == b"audio-bytes"
+    assert res.headers["content-type"].startswith("audio/mpeg")

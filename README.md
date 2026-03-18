@@ -69,6 +69,7 @@ Copy `.env.example` and set values:
   - `BEHAVIOR_STYLE_EN`, `BEHAVIOR_STYLE_RO`
 - Twilio:
   - `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`, `TWILIO_SMS_FROM_NUMBER`, `TWILIO_VOICE_EN`, `TWILIO_VOICE_RO`, `TWILIO_DEFAULT_LANGUAGE`
+  - `TTS_PROVIDER_RO`, `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID_RO`, `ELEVENLABS_MODEL_ID`, `ELEVENLABS_OUTPUT_FORMAT`
 - Integrations:
   - `DATABASE_URL`, `CRM_API_BASE_URL`, `CRM_API_KEY`
 - Google Calendar / Meet:
@@ -86,10 +87,17 @@ Copy `.env.example` and set values:
 TWILIO_VOICE_EN=Polly.Amy-Neural
 TWILIO_VOICE_RO=Google.ro-RO-Wavenet-B
 TWILIO_DEFAULT_LANGUAGE=ro-RO
+TTS_PROVIDER_RO=elevenlabs
+ELEVENLABS_API_KEY=
+ELEVENLABS_VOICE_ID_RO=EXAVITQu4vr4xnSDxMaL
+ELEVENLABS_MODEL_ID=eleven_multilingual_v2
+ELEVENLABS_OUTPUT_FORMAT=mp3_44100_128
 BEHAVIOR_STYLE_EN=Warm, friendly, concise, and natural. Use short sentences and empathy.
 BEHAVIOR_STYLE_RO=Cald, prietenos, concis și natural. Folosește propoziții scurte și empatie.
 GREETING_RO=Bună! Sunt Ana de la Compania X. Cu ce te pot ajuta astăzi?
 ```
+
+When `TTS_PROVIDER_RO=elevenlabs` and `ELEVENLABS_API_KEY` is configured, Romanian Twilio responses are rendered as generated audio clips served from this app and played back to callers via Twilio `<Play>`. If ElevenLabs is not configured, the app falls back to Twilio `<Say>`.
 
 ---
 
@@ -103,6 +111,7 @@ GREETING_RO=Bună! Sunt Ana de la Compania X. Cu ce te pot ajuta astăzi?
 - `POST /api/actions/research`
 - `POST /twilio/voice`
 - `POST /twilio/outbound`
+- `GET /api/tts/{token}`
 
 ### Example simulate turn
 
@@ -166,6 +175,7 @@ Direct URL inspection accepts only public `http`/`https` targets and blocks `loc
 3. Set method `POST`.
 4. Fill Twilio credentials in `.env` for outbound calls.
 5. Fill `TWILIO_SMS_FROM_NUMBER` if you want SMS actions.
+6. For Romanian ElevenLabs playback, set `PUBLIC_BASE_URL` to your public HTTPS hostname and configure `ELEVENLABS_API_KEY`.
 
 ---
 
@@ -256,8 +266,10 @@ If the bot repeats the intro or doesn’t seem Romanian-first:
 
 1. Set `INTRO_ONLY_MODE=false`.
 2. Set `TWILIO_DEFAULT_LANGUAGE=ro-RO`.
-3. Set `TWILIO_VOICE_RO=Google.ro-RO-Wavenet-B`.
-4. Make sure `OPENAI_API_KEY` is set if you want AI-generated answers.
+3. Set `TTS_PROVIDER_RO=elevenlabs` and configure `ELEVENLABS_API_KEY`.
+4. Optionally keep `TWILIO_VOICE_RO=Google.ro-RO-Wavenet-B` as the fallback voice.
+5. Make sure `PUBLIC_BASE_URL` points to your public HTTPS app URL.
+6. Make sure `OPENAI_API_KEY` is set if you want AI-generated answers.
 
 ---
 
