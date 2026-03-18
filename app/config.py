@@ -29,7 +29,6 @@ class Settings(BaseSettings):
     twilio_account_sid: str = ""
     twilio_auth_token: str = ""
     twilio_from_number: str = ""
-    twilio_sms_from_number: str = ""
     twilio_voice_en: str = "Polly.Amy-Neural"
     twilio_voice_ro: str = "Google.ro-RO-Standard-A"
 
@@ -44,24 +43,6 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./voice_agent.db"
     crm_api_base_url: str = ""
     crm_api_key: str = ""
-
-    # Google Calendar / Google Meet
-    google_client_id: str = ""
-    google_client_secret: str = ""
-    google_refresh_token: str = ""
-    google_calendar_id: str = "primary"
-    google_calendar_timezone: str = "Europe/Bucharest"
-    google_calendar_base_url: str = "https://www.googleapis.com/calendar/v3"
-    google_oauth_token_url: str = "https://oauth2.googleapis.com/token"
-
-    # Web research
-    tavily_api_key: str = ""
-    tavily_base_url: str = "https://api.tavily.com"
-    web_search_max_results: int = 3
-
-    # Operations
-    human_handoff_number: str = ""
-    admin_alert_email: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
