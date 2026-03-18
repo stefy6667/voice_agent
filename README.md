@@ -14,6 +14,7 @@ Deploy-ready FastAPI service for a customer support voice agent that:
 - **Business customization** (`BUSINESS_NAME`, `AGENT_NAME`, greetings).
 - **Skill router** (`sales`, `support`, `retention`, `scheduling`, `research`).
 - **Knowledge lookup** (`knowledge/faq.json`) for grounded answers.
+- Sample FAQ now includes both support examples and sales-oriented entries for product overview, pricing, value, and demo questions.
 - **Dynamic SMS summaries** built from recent conversation details such as reservation date, hour, and guest count when available.
 - **Research actions** for URL inspection and optional web search.
 - **Sales-oriented prompting** for discovery, value framing, and next-step closing.

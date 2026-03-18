@@ -382,3 +382,28 @@ def test_restaurant_demo_reply_is_concrete_and_actionable():
     assert "4 persoane" in answer or "4 guests" in answer
     assert "19:30" in answer or "7:30" in answer
     assert "sms" in answer
+
+
+def test_sales_pricing_question_uses_english_kb_and_mentions_price():
+    res = client.post(
+        "/api/simulate-turn",
+        json={"session_id": "pricing-en", "user_text": "How much does a personalized AI agent bot cost?"},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["language"] == "en"
+    assert body["source"] == "knowledge_base"
+    assert "5000" in body["answer"]
+    assert "25" in body["answer"]
+
+
+def test_sales_demo_question_uses_english_kb_and_stays_natural():
+    res = client.post(
+        "/api/simulate-turn",
+        json={"session_id": "demo-en", "user_text": "How would the demo work for my business?"},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["source"] == "knowledge_base"
+    assert "demo" in body["answer"].lower()
+    assert "business" in body["answer"].lower()

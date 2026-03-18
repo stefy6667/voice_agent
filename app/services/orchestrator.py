@@ -59,6 +59,22 @@ class MockLLMProvider:
                 "Dacă vrei, îl transformăm imediat într-un pas concret pentru situația ta."
             )
 
+        if "pricing" in source:
+            return (
+                "Yes — the personalized AI agent bot is priced at 5000 dollars, "
+                "and the ongoing maintenance and hosting fee is 25 dollars per month. "
+                "If you want, I can also show you what that would look like for your business in a live demo."
+            )
+        if "demo" in source:
+            return (
+                "The demo is tailored to your business. "
+                "I can simulate how the agent would greet your customer, qualify the request, answer naturally, and move the conversation toward booking, follow-up, or closing."
+            )
+        if "ai_agent" in source or "value" in source:
+            return (
+                "We sell custom AI agents and bots for businesses. "
+                "They can answer leads, qualify requests, automate support, send SMS follow-ups, and handle demos in a natural way so the customer clearly sees the value."
+            )
         if "invoice" in source:
             return (
                 "Yes, I can help with the invoice. From the information I have, the invoice is usually sent by email after payment confirmation, "
