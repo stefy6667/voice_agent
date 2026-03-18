@@ -124,6 +124,138 @@ def build_sms_message(language: str, skill_name: str | None) -> str:
     return "Hi! I'm sending you an SMS with a summary of our discussion and the next steps."
 
 
+def _recent_user_messages(history: list[dict[str, str]], limit: int = 4) -> list[str]:
+    return [turn["text"] for turn in history if turn["role"] == "user"][-limit:]
+
+
+def _extract_first_match(patterns: list[str], text: str, flags: int = 0) -> str | None:
+    for pattern in patterns:
+        match = re.search(pattern, text, flags)
+        if match:
+            return match.group(1).strip()
+    return None
+
+
+def extract_reservation_details(history: list[dict[str, str]]) -> dict[str, str]:
+    combined = " | ".join(_recent_user_messages(history, limit=6))
+    lowered = combined.lower()
+
+    date_value = _extract_first_match(
+        [
+            r"\b(\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?)\b",
+            r"\b(?:pe\s+)?(luni|marti|marți|miercuri|joi|vineri|sambata|sâmbătă|duminica|duminică|mâine|maine|today|tomorrow)\b",
+        ],
+        lowered,
+        flags=re.IGNORECASE,
+    )
+    time_value = _extract_first_match(
+        [
+            r"\b(?:la|ora)\s+(\d{1,2}[:.]\d{2})\b",
+            r"\b(\d{1,2}[:.]\d{2})\b",
+        ],
+        lowered,
+        flags=re.IGNORECASE,
+    )
+    guests_value = _extract_first_match(
+        [
+            r"\b(\d+)\s*(?:persoane|persons|people|guests|locuri)\b",
+            r"\bmasa\s+pentru\s+(\d+)\b",
+            r"\btable for\s+(\d+)\b",
+        ],
+        lowered,
+        flags=re.IGNORECASE,
+    )
+    name_value = _extract_first_match(
+        [
+            r"\b(?:numele meu este|ma numesc|mă numesc)\s+([a-zăâîșț\- ]{2,40})\b",
+            r"\b(?:my name is|name is)\s+([a-z\- ]{2,40})\b",
+        ],
+        combined,
+        flags=re.IGNORECASE,
+    )
+
+    details: dict[str, str] = {"note": " | ".join(_recent_user_messages(history, limit=3))}
+    if date_value:
+        details["date"] = date_value
+    if time_value:
+        details["time"] = time_value.replace(".", ":")
+    if guests_value:
+        details["guests"] = guests_value
+    if name_value:
+        details["name"] = " ".join(name_value.split())
+    return details
+
+
+def build_dynamic_sms_message(language: str, skill_name: str | None, history: list[dict[str, str]]) -> str:
+    details = extract_reservation_details(history)
+    note = details.get("note", "")
+    reservation_markers = ["rezerv", "restaurant", "masa", "booking", "reservation", "table"]
+    is_reservation = any(marker in note.lower() for marker in reservation_markers) or skill_name == "scheduling"
+
+    if is_reservation:
+        segments: list[str] = []
+        if details.get("date"):
+            segments.append(f"data {details['date']}" if language == "ro" else f"date {details['date']}")
+        if details.get("time"):
+            segments.append(f"ora {details['time']}" if language == "ro" else f"time {details['time']}")
+        if details.get("guests"):
+            segments.append(
+                f"{details['guests']} {'persoane' if language == 'ro' else 'guests'}"
+            )
+        if details.get("name"):
+            segments.append(f"{'numele' if language == 'ro' else 'name'} {details['name']}")
+
+        summary = ", ".join(segments) if segments else note
+        if language == "ro":
+            return (
+                "Confirmare rezervare: "
+                f"{summary}. "
+                "Dacă vrei să modifici ora sau numărul de persoane, răspunde la acest mesaj."
+            )
+        return (
+            "Reservation confirmation: "
+            f"{summary}. "
+            "If you want to change the time or party size, reply to this message."
+        )
+
+    if note:
+        compact_note = note[:220]
+        if language == "ro":
+            return f"Rezumat conversație: {compact_note}"
+        return f"Conversation summary: {compact_note}"
+
+    return build_sms_message(language, skill_name)
+
+
+def should_fetch_website_context(
+    user_text: str,
+    kb_match: KnowledgeMatch | None,
+    active_skill_name: str | None,
+) -> bool:
+    if not settings.website_context_url:
+        return False
+    lowered = user_text.lower()
+    markers = [
+        "site",
+        "website",
+        "menu",
+        "pricing",
+        "price",
+        "product",
+        "products",
+        "restaurant",
+        "reservation",
+        "rezervare",
+        "detalii",
+        "details",
+    ]
+    return kb_match is None and (
+        wants_web_research(user_text)
+        or active_skill_name in {"sales", "scheduling"}
+        or any(marker in lowered for marker in markers)
+    )
+
+
 def build_sms_confirmation(language: str, phone_number: str, status: str) -> str:
     if language == "ro":
         if status == "dry_run":
@@ -190,13 +322,35 @@ async def build_turn_response(session_id: str, user_text: str) -> SimulateTurnRe
     active_skill = skill_registry.resolve(detection.language, user_text)
     skill_instruction = active_skill.prompt_instruction(detection.language) if active_skill else None
     history = sessions.get_recent_turns(session_id)
+
+    if should_fetch_website_context(user_text, kb_match, active_skill.name if active_skill else None):
+        try:
+            website_result = await tools.inspect_url(settings.website_context_url)
+        except UnsafeResearchTargetError as exc:
+            website_result = {
+                "provider": "url_fetch",
+                "configured": True,
+                "status": "blocked",
+                "message": str(exc),
+                "url": settings.website_context_url,
+            }
+        context["website_context"] = website_result
+        actions.append(website_result)
+
     handoff = needs_handoff(user_text, kb_match, history)
 
     phone_number = extract_phone_number(user_text)
     sms_target = phone_number or caller_number
     sms_action = None
     if sms_target and wants_sms(user_text):
-        sms_action = await tools.send_sms(sms_target, build_sms_message(detection.language, active_skill.name if active_skill else None))
+        sms_action = await tools.send_sms(
+            sms_target,
+            build_dynamic_sms_message(
+                detection.language,
+                active_skill.name if active_skill else None,
+                history,
+            ),
+        )
         actions.append(sms_action)
 
     outbound_action = None

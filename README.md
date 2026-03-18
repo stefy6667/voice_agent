@@ -14,6 +14,7 @@ Deploy-ready FastAPI service for a customer support voice agent that:
 - **Business customization** (`BUSINESS_NAME`, `AGENT_NAME`, greetings).
 - **Skill router** (`sales`, `support`, `retention`, `scheduling`, `research`).
 - **Knowledge lookup** (`knowledge/faq.json`) for grounded answers.
+- **Dynamic SMS summaries** built from recent conversation details such as reservation date, hour, and guest count when available.
 - **Research actions** for URL inspection and optional web search.
 - **Sales-oriented prompting** for discovery, value framing, and next-step closing.
 - **DB integration ready** with a default **SQLite** implementation that works out-of-the-box.
@@ -75,7 +76,7 @@ Copy `.env.example` and set values:
 - Google Calendar / Meet:
   - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, `GOOGLE_CALENDAR_ID`, `GOOGLE_CALENDAR_TIMEZONE`
 - Web research:
-  - `TAVILY_API_KEY`, `TAVILY_BASE_URL`, `WEB_SEARCH_MAX_RESULTS`
+  - `TAVILY_API_KEY`, `TAVILY_BASE_URL`, `WEB_SEARCH_MAX_RESULTS`, `WEBSITE_CONTEXT_URL`
 - Operations:
   - `HUMAN_HANDOFF_NUMBER`, `ADMIN_ALERT_EMAIL`
 
@@ -165,6 +166,7 @@ If Google credentials are missing, the scheduling endpoint returns a **dry-run**
 If `TAVILY_API_KEY` is missing, search requests return a **dry-run** response, but direct URL inspection still works.
 
 Direct URL inspection accepts only public `http`/`https` targets and blocks `localhost` or private-network addresses to avoid accidental internal fetches.
+If `WEBSITE_CONTEXT_URL` is configured, the agent can fetch that page automatically when the user asks for product/menu/site details and there is no strong FAQ match.
 
 ---
 

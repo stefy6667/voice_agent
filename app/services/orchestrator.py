@@ -136,12 +136,19 @@ class MockLLMProvider:
     ) -> str:
         history = conversation_history or []
         research = context.get("research") if isinstance(context, dict) else None
+        website_context = context.get("website_context") if isinstance(context, dict) else None
 
         if research and research.get("status") in {"ok", "dry_run"}:
             summary = research.get("summary") or research.get("title") or ""
             if language == "ro":
                 return f"Am verificat informația și iată pe scurt ce am găsit: {summary}"
             return f"I checked the information and here is the short version: {summary}"
+
+        if website_context and website_context.get("status") == "ok":
+            summary = website_context.get("summary") or website_context.get("title") or ""
+            if language == "ro":
+                return f"Am verificat site-ul configurat și iată ce este relevant: {summary}"
+            return f"I checked the configured website and here is the relevant information: {summary}"
 
         if kb_match and kb_match.confidence >= 0.6:
             repeated = self._already_answered_kb(history, kb_match)

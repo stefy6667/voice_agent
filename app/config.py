@@ -63,6 +63,7 @@ class Settings(BaseSettings):
     tavily_api_key: str = ""
     tavily_base_url: str = "https://api.tavily.com"
     web_search_max_results: int = 3
+    website_context_url: str = ""
 
     # Operations
     human_handoff_number: str = ""

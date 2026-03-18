@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from app.main import app, kb, telephony
+from app.main import app, kb, research, telephony
 
 
 client = TestClient(app)
@@ -317,3 +317,56 @@ def test_tts_audio_endpoint_returns_cached_audio():
     assert res.status_code == 200
     assert res.content == b"audio-bytes"
     assert res.headers["content-type"].startswith("audio/mpeg")
+
+
+def test_sms_request_uses_dynamic_reservation_summary():
+    client.post(
+        "/twilio/voice",
+        data={"CallSid": "CA-RESTO", "From": "+40123456789", "SpeechResult": ""},
+    )
+    client.post(
+        "/api/simulate-turn",
+        json={"session_id": "CA-RESTO", "user_text": "Vreau rezervare la restaurant pe 21/03 la 19:30 pentru 4 persoane"},
+    )
+    res = client.post(
+        "/api/simulate-turn",
+        json={"session_id": "CA-RESTO", "user_text": "Trimite-mi un SMS de confirmare"},
+    )
+    assert res.status_code == 200
+    action = res.json()["actions"][0]
+    assert action["provider"] == "twilio"
+    assert "21/03" in action["preview_message"]
+    assert "19:30" in action["preview_message"]
+    assert "4 persoane" in action["preview_message"]
+
+
+def test_website_context_url_is_used_when_needed():
+    from app.config import settings
+
+    original_url = settings.website_context_url
+    original_method = research.inspect_url
+
+    async def fake_inspect(url: str):
+        return {
+            "provider": "url_fetch",
+            "configured": True,
+            "status": "ok",
+            "url": url,
+            "title": "Restaurant menu",
+            "summary": "Meniul zilei include paste, pizza și opțiuni vegane.",
+        }
+
+    settings.website_context_url = "https://example.com/menu"
+    research.inspect_url = fake_inspect
+    try:
+        res = client.post(
+            "/api/simulate-turn",
+            json={"session_id": "web-context", "user_text": "Ce opțiuni aveți în meniu pentru restaurant?"},
+        )
+        assert res.status_code == 200
+        body = res.json()
+        assert body["actions"]
+        assert body["actions"][0]["url"] == "https://example.com/menu"
+    finally:
+        research.inspect_url = original_method
+        settings.website_context_url = original_url
