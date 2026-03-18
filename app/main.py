@@ -117,6 +117,32 @@ def build_outbound_message(language: str, skill_name: str | None) -> str:
     return "I’m calling back shortly so we can continue the conversation."
 
 
+def wants_sms(text: str) -> bool:
+    lowered = text.lower()
+    markers = ["sms", "text me", "message me", "trimite-mi sms", "trimite sms", "mesaj", "send me a text"]
+    return any(marker in lowered for marker in markers)
+
+
+def build_sms_message(language: str, skill_name: str | None) -> str:
+    if language == "ro":
+        if skill_name == "sales":
+            return "Salut! Îți trimit pe SMS un rezumat al ofertei și următorii pași pentru demo."
+        return "Salut! Îți trimit pe SMS rezumatul discuției și următorii pași."
+    if skill_name == "sales":
+        return "Hi! I'm sending you an SMS with the offer summary and the next demo steps."
+    return "Hi! I'm sending you an SMS with a summary of our discussion and the next steps."
+
+
+def build_sms_confirmation(language: str, phone_number: str, status: str) -> str:
+    if language == "ro":
+        if status == "dry_run":
+            return f"Perfect, am pregătit SMS-ul pentru {phone_number}. După ce activezi Twilio, mesajul va pleca automat către numărul de pe care ai sunat."
+        return f"Perfect, tocmai am trimis SMS-ul către {phone_number}."
+    if status == "dry_run":
+        return f"Perfect, I prepared the SMS for {phone_number}. Once Twilio is enabled, it will be sent automatically to the number you called from."
+    return f"Perfect, I just sent the SMS to {phone_number}."
+
+
 def build_outbound_confirmation(language: str, phone_number: str, status: str) -> str:
     if language == "ro":
         if status == "dry_run":
@@ -142,6 +168,7 @@ def should_use_kb_match(user_text: str, kb_match: KnowledgeMatch | None) -> bool
 
 async def build_turn_response(session_id: str, user_text: str) -> SimulateTurnResponse:
     previous_language = sessions.get_language(session_id)
+    caller_number = sessions.get_value(session_id, "caller_number")
     detection = language_detector.detect(user_text, previous_language=previous_language)
     sessions.upsert_language(session_id, detection.language)
     sessions.append_turn(session_id, "user", user_text)
@@ -167,6 +194,12 @@ async def build_turn_response(session_id: str, user_text: str) -> SimulateTurnRe
     handoff = needs_handoff(user_text, kb_match, history)
 
     phone_number = extract_phone_number(user_text)
+    sms_target = phone_number or caller_number
+    sms_action = None
+    if sms_target and wants_sms(user_text):
+        sms_action = await tools.send_sms(sms_target, build_sms_message(detection.language, active_skill.name if active_skill else None))
+        actions.append(sms_action)
+
     outbound_action = None
     if phone_number and wants_outbound_call(user_text):
         outbound_action = await telephony.create_outbound_call(
@@ -185,7 +218,9 @@ async def build_turn_response(session_id: str, user_text: str) -> SimulateTurnRe
         source = "handoff"
         citations: list[str] = []
     else:
-        if outbound_action is not None:
+        if sms_action is not None:
+            answer = build_sms_confirmation(detection.language, sms_target, sms_action.get("status", "queued"))
+        elif outbound_action is not None:
             answer = build_outbound_confirmation(detection.language, phone_number, outbound_action.get("status", "queued"))
         else:
             answer = await llm.generate(
@@ -196,7 +231,7 @@ async def build_turn_response(session_id: str, user_text: str) -> SimulateTurnRe
                 skill_instruction,
                 history,
             )
-        source = "knowledge_base" if kb_match else ("action" if outbound_action else ("research" if actions else "llm"))
+        source = "knowledge_base" if kb_match else ("action" if (sms_action or outbound_action) else ("research" if actions else "llm"))
         citations = [kb_match.source] if kb_match else []
 
     sessions.append_turn(session_id, "assistant", answer)
@@ -272,8 +307,11 @@ async def research_action(payload: ResearchRequest) -> dict:
 async def twilio_voice(
     CallSid: str = Form(default=""),
     SpeechResult: str = Form(default=""),
+    From: str = Form(default=""),
 ) -> str:
     session_id = CallSid or "unknown-call"
+    if From:
+        sessions.set_value(session_id, "caller_number", From)
 
     if not SpeechResult:
         lang_code = settings.twilio_default_language

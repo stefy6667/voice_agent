@@ -74,8 +74,36 @@ class MockLLMProvider:
             "If you want, I can turn that into a concrete next step for your case."
         )
 
+
+    @staticmethod
+    def _demo_reply(user_text: str, language: str) -> str:
+        lowered = user_text.lower()
+        niche = "your business"
+        if language == "ro":
+            for marker in ["pentru ", "despre "]:
+                if marker in lowered:
+                    niche = user_text[lowered.index(marker) + len(marker):].strip(" .?!") or niche
+                    break
+            return (
+                f"Sigur — îți fac un demo natural pentru zona {niche}. Imaginează-ți că sună un client, agentul răspunde, înțelege intenția, "
+                "confirmă rapid detaliile importante, propune intervalul potrivit sau oferta potrivită, apoi trimite SMS ori programează următorul pas fără să pară un robot."
+            )
+
+        for marker in ["for ", "about "]:
+            if marker in lowered:
+                niche = user_text[lowered.index(marker) + len(marker):].strip(" .?!") or niche
+                break
+        return (
+            f"Sure — here is a natural demo for the {niche} niche. Imagine a customer calling in, the agent answers naturally, understands the intent, "
+            "confirms the important details, proposes the right slot or offer, and then sends an SMS or books the next step without sounding robotic."
+        )
+
     @staticmethod
     def _natural_reply(user_text: str, language: str, skill_instruction: str | None) -> str:
+        lowered = user_text.lower()
+        if "demo" in lowered or "demonstra" in lowered or "demonstre" in lowered:
+            return MockLLMProvider._demo_reply(user_text, language)
+
         if language == "ro":
             if skill_instruction and "SALES" in skill_instruction:
                 return (

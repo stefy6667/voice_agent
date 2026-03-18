@@ -233,3 +233,27 @@ def test_kb_is_not_used_for_non_questional_fact_mention():
     )
     assert res.status_code == 200
     assert res.json()["source"] != "knowledge_base"
+
+
+def test_sms_request_uses_caller_number_from_twilio_context():
+    client.post("/twilio/voice", data={"CallSid": "CA-SMS", "From": "+40111222333", "SpeechResult": ""})
+    res = client.post(
+        "/api/simulate-turn",
+        json={"session_id": "CA-SMS", "user_text": "Trimite-mi un SMS cu detaliile"},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["actions"]
+    assert body["actions"][0]["provider"] == "twilio"
+    assert body["actions"][0]["to"] == "+40111222333"
+
+
+def test_demo_reply_is_natural_for_business_niche():
+    res = client.post(
+        "/api/simulate-turn",
+        json={"session_id": "demo-1", "user_text": "Arată-mi un demo pentru restaurant"},
+    )
+    assert res.status_code == 200
+    answer = res.json()["answer"].lower()
+    assert "demo" in answer
+    assert "restaurant" in answer

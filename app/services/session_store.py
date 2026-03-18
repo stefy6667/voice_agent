@@ -9,6 +9,13 @@ class SessionStore:
         session = self._sessions.get(session_id, {})
         return session.get("language")
 
+    def set_value(self, session_id: str, key: str, value: str) -> None:
+        self._sessions.setdefault(session_id, {})[key] = value
+
+    def get_value(self, session_id: str, key: str) -> str | None:
+        session = self._sessions.get(session_id, {})
+        return session.get(key)
+
     def append_turn(self, session_id: str, role: str, text: str) -> None:
         session = self._sessions.setdefault(session_id, {})
         turns = session.setdefault("turns", [])
