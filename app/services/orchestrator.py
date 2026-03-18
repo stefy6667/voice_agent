@@ -3,6 +3,7 @@ from typing import Protocol
 import httpx
 
 from app.config import settings
+from app.services.knowledge_base import KnowledgeMatch
 
 
 class LLMProvider(Protocol):
@@ -10,7 +11,7 @@ class LLMProvider(Protocol):
         self,
         user_text: str,
         language: str,
-        kb_answer: str | None,
+        kb_match: KnowledgeMatch | None,
         context: dict,
         skill_instruction: str | None = None,
         conversation_history: list[dict[str, str]] | None = None,
@@ -19,29 +20,113 @@ class LLMProvider(Protocol):
 
 
 class MockLLMProvider:
+    @staticmethod
+    def _already_answered_kb(history: list[dict[str, str]], kb_match: KnowledgeMatch | None) -> bool:
+        if not kb_match:
+            return False
+        recent_assistant_turns = [turn["text"].lower() for turn in history[-4:] if turn["role"] == "assistant"]
+        answer_prefix = kb_match.answer.lower()[:30]
+        return any(answer_prefix in turn or kb_match.source.lower() in turn for turn in recent_assistant_turns)
+
+    @staticmethod
+    def _invoice_follow_up(language: str) -> str:
+        if language == "ro":
+            return (
+                "Pot să te ajut mai concret cu factura. Spune-mi, te rog, dacă vrei retransmiterea pe email, "
+                "schimbarea adresei de facturare sau verificarea ultimei plăți."
+            )
+        return (
+            "I can help with the invoice in more detail. Please tell me if you want it resent by email, "
+            "need to update the billing address, or want me to check the latest payment."
+        )
+
+    @staticmethod
+    def _grounded_kb_reply(language: str, user_text: str, kb_match: KnowledgeMatch) -> str:
+        source = kb_match.source.lower()
+        if language == "ro":
+            if "factura" in source:
+                return (
+                    "Da, te pot ajuta cu factura. Din informațiile pe care le am, factura se trimite pe email după confirmarea plății, "
+                    "de obicei în maximum 24 de ore. Dacă vrei, putem vedea imediat dacă ai nevoie de retransmitere sau de schimbarea adresei de email."
+                )
+            if "comanda" in source or "livrare" in source:
+                return (
+                    "Sigur. Din informațiile pe care le am, livrarea durează de regulă între 1 și 3 zile lucrătoare. "
+                    "Dacă vrei, spune-mi când ai plasat comanda și te ajut să estimăm mai exact."
+                )
+            return (
+                f"Din informațiile pe care le am, răspunsul este acesta: {kb_match.answer} "
+                "Dacă vrei, îl transformăm imediat într-un pas concret pentru situația ta."
+            )
+
+        if "invoice" in source:
+            return (
+                "Yes, I can help with the invoice. From the information I have, the invoice is usually sent by email after payment confirmation, "
+                "typically within 24 hours. If you want, we can immediately check whether you need it resent or need to update the email address."
+            )
+        if "delivery" in source or "order" in source:
+            return (
+                "Sure. From the information I have, delivery usually takes 1 to 3 business days. "
+                "If you want, tell me when you placed the order and I’ll help estimate it more precisely."
+            )
+        return (
+            f"From the information I have, the answer is: {kb_match.answer} "
+            "If you want, I can turn that into a concrete next step for your case."
+        )
+
+    @staticmethod
+    def _natural_reply(user_text: str, language: str, skill_instruction: str | None) -> str:
+        if language == "ro":
+            if skill_instruction and "SALES" in skill_instruction:
+                return (
+                    "Sigur, hai să găsim varianta potrivită pentru tine. "
+                    "Spune-mi ce vrei să obții și ce buget ai în minte, iar eu îți recomand cea mai bună opțiune."
+                )
+            return (
+                f"În regulă, te ajut cu asta. Ai spus: „{user_text}”. "
+                "Dă-mi încă un detaliu scurt și continuăm natural, ca într-o conversație normală."
+            )
+
+        if skill_instruction and "SALES" in skill_instruction:
+            return (
+                "Absolutely — let's find the best option for you. "
+                "Tell me what outcome you want and the budget you have in mind, and I'll recommend the best fit."
+            )
+        return (
+            f"Alright, I can help with that. You said: “{user_text}”. "
+            "Give me one more short detail and we'll continue naturally from there."
+        )
+
     async def generate(
         self,
         user_text: str,
         language: str,
-        kb_answer: str | None,
+        kb_match: KnowledgeMatch | None,
         context: dict,
         skill_instruction: str | None = None,
         conversation_history: list[dict[str, str]] | None = None,
     ) -> str:
-        if kb_answer:
-            return kb_answer
+        history = conversation_history or []
+        research = context.get("research") if isinstance(context, dict) else None
 
-        skill_text = f" [{skill_instruction}]" if skill_instruction else ""
-        if language == "ro":
-            return (
-                f"Salut! Sunt {settings.agent_name} de la {settings.business_name}.{skill_text} "
-                "Te ajut cu drag. Spune-mi, te rog, câteva detalii și rezolvăm împreună."
-            )
+        if research and research.get("status") in {"ok", "dry_run"}:
+            summary = research.get("summary") or research.get("title") or ""
+            if language == "ro":
+                return f"Am verificat informația și iată pe scurt ce am găsit: {summary}"
+            return f"I checked the information and here is the short version: {summary}"
 
-        return (
-            f"Hi! I'm {settings.agent_name} from {settings.business_name}.{skill_text} "
-            "Happy to help. Please share a few details and we’ll sort this out together."
-        )
+        if kb_match and kb_match.confidence >= 0.6:
+            repeated = self._already_answered_kb(history, kb_match)
+            is_invoice = "factura" in kb_match.source.lower() or "invoice" in kb_match.source.lower()
+
+            if repeated and is_invoice:
+                return self._invoice_follow_up(language)
+
+            grounded = self._grounded_kb_reply(language, user_text, kb_match)
+            citation = f" (Sursă: {kb_match.source})" if language == "ro" else f" (Source: {kb_match.source})"
+            return f"{grounded}{citation}"
+
+        return self._natural_reply(user_text, language, skill_instruction)
 
 
 class OpenAILLMProvider:
@@ -49,7 +134,7 @@ class OpenAILLMProvider:
         self,
         user_text: str,
         language: str,
-        kb_answer: str | None,
+        kb_match: KnowledgeMatch | None,
         context: dict,
         skill_instruction: str | None = None,
         conversation_history: list[dict[str, str]] | None = None,
@@ -68,16 +153,17 @@ class OpenAILLMProvider:
             return await MockLLMProvider().generate(
                 user_text,
                 language,
-                kb_answer,
+                kb_match,
                 context,
                 skill_instruction,
                 conversation_history,
             )
 
         language_name = "Romanian" if language == "ro" else "English"
-        context_text = kb_answer or "No KB match found. Ask concise clarification question."
-        skill_prompt = skill_instruction or "No specific skill active."
+        kb_text = kb_match.answer if kb_match else "No KB match found. Ask one concise clarifying question."
+        kb_source = kb_match.source if kb_match else "none"
         history = conversation_history or []
+        skill_prompt = skill_instruction or "No specific skill active."
 
         payload = {
             "model": model,
@@ -90,11 +176,15 @@ class OpenAILLMProvider:
                         f"Business domain: {settings.business_domain}. "
                         f"Agent display name: {settings.agent_name}. "
                         "Reply in the same language as the user. "
-                        "Sound like a human support rep: warm, natural, short spoken phrases, no robotic style. "
-                        "Acknowledge user emotion briefly, then provide actionable help. "
-                        "Ask at most one follow-up question at a time. "
-                        "Do not invent policy details. "
-                        "Use available customer context and be concise. "
+                        "Keep responses brief, natural, and human-sounding for speech. "
+                        "Sound like a real chatbot assistant, not a rigid support script. "
+                        "Use knowledge base evidence as grounding, but do not repeat FAQ wording verbatim unless absolutely necessary. "
+                        "Do not sound like a rigid FAQ bot; sound like a helpful chatbot that is thinking through the user's case. "
+                        "If the user repeats the same topic, do not repeat the same sentence verbatim; instead move the conversation forward with the next helpful question or action. "
+                        "If web research or URL inspection results are present, weave them into the reply naturally like a real AI assistant. "
+                        "If knowledge base evidence is present, mention the source label naturally. "
+                        "If data is missing or confidence is low, ask one clarification question instead of inventing details. "
+                        "Recommend a human handoff for billing disputes, legal requests, security concerns, or repeated failures. "
                         f"Behavior EN: {settings.behavior_style_en}. "
                         f"Behavior RO: {settings.behavior_style_ro}."
                     ),
@@ -106,12 +196,13 @@ class OpenAILLMProvider:
                         f"Skill instruction: {skill_prompt}\n"
                         f"Customer context: {context}\n"
                         f"Recent conversation turns: {history}\n"
-                        f"KB: {context_text}\n"
+                        f"KB source: {kb_source}\n"
+                        f"KB answer: {kb_text}\n"
                         f"User: {user_text}"
                     ),
                 },
             ],
-            "temperature": 0.45,
+            "temperature": 0.65,
         }
 
         async with httpx.AsyncClient(timeout=20) as client:

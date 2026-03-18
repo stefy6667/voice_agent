@@ -5,18 +5,21 @@ Deploy-ready FastAPI service for a customer support voice agent that:
 - places outbound calls (Twilio API);
 - responds dynamically (knowledge + LLM, not static scripts);
 - switches automatically between Romanian and English;
-- supports plug-and-play skills (sales/support/retention);
-- supports business-specific branding + integrations.
+- supports plug-and-play skills (sales/support/retention/scheduling/research);
+- can trigger production actions such as Google Meet scheduling, Twilio SMS sending, and natural web research.
 
 ## Features
 
 - **Language auto-switch** (`ro`/`en`) per turn.
 - **Business customization** (`BUSINESS_NAME`, `AGENT_NAME`, greetings).
-- **Skill router** (`sales`, `support`, `retention`) with easy extension.
+- **Skill router** (`sales`, `support`, `retention`, `scheduling`, `research`).
 - **Knowledge lookup** (`knowledge/faq.json`) for grounded answers.
+- **Research actions** for URL inspection and optional web search.
+- **Sales-oriented prompting** for discovery, value framing, and next-step closing.
 - **DB integration ready** with a default **SQLite** implementation that works out-of-the-box.
 - **CRM API connector** for external software.
-- **Twilio inbound/outbound endpoints**.
+- **Twilio inbound/outbound voice** and **Twilio SMS action endpoint**.
+- **Google Calendar / Google Meet scheduling endpoint** with dry-run fallback when credentials are missing.
 - **Docker deployment** included.
 
 ---
@@ -65,16 +68,19 @@ Copy `.env.example` and set values:
 - Behavior style:
   - `BEHAVIOR_STYLE_EN`, `BEHAVIOR_STYLE_RO`
 - Twilio:
-  - `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`, `TWILIO_VOICE_EN`, `TWILIO_VOICE_RO`, `TWILIO_DEFAULT_LANGUAGE`
+  - `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`, `TWILIO_SMS_FROM_NUMBER`, `TWILIO_VOICE_EN`, `TWILIO_VOICE_RO`, `TWILIO_DEFAULT_LANGUAGE`
 - Integrations:
-  - `DATABASE_URL` (defaults to SQLite)
-  - `CRM_API_BASE_URL`, `CRM_API_KEY`
+  - `DATABASE_URL`, `CRM_API_BASE_URL`, `CRM_API_KEY`
+- Google Calendar / Meet:
+  - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, `GOOGLE_CALENDAR_ID`, `GOOGLE_CALENDAR_TIMEZONE`
+- Web research:
+  - `TAVILY_API_KEY`, `TAVILY_BASE_URL`, `WEB_SEARCH_MAX_RESULTS`
+- Operations:
+  - `HUMAN_HANDOFF_NUMBER`, `ADMIN_ALERT_EMAIL`
 
 ---
 
-## Human-like behavior & voice tuning
-
-To make the assistant sound more natural:
+## Human-like behavior & Romanian voice tuning
 
 ```env
 TWILIO_VOICE_EN=Polly.Amy-Neural
@@ -82,37 +88,8 @@ TWILIO_VOICE_RO=Google.ro-RO-Standard-A
 TWILIO_DEFAULT_LANGUAGE=ro-RO
 BEHAVIOR_STYLE_EN=Warm, friendly, concise, and natural. Use short sentences and empathy.
 BEHAVIOR_STYLE_RO=Cald, prietenos, concis și natural. Folosește propoziții scurte și empatie.
+GREETING_RO=Bună! Sunt Ana de la Compania X. Cu ce te pot ajuta astăzi?
 ```
-
-Also customize introductions:
-
-```env
-GREETING_RO=Bună! Sunt Ana de la Compania X. Mă bucur să te ajut astăzi.
-GREETING_EN=Hello! I'm Ana from Company X. Happy to help you today.
-```
-
-## Use Groq as AI provider
-
-You can switch from OpenAI to Groq (OpenAI-compatible API):
-
-```env
-LLM_PROVIDER=groq
-GROQ_API_KEY=your_groq_key
-GROQ_MODEL=llama-3.1-8b-instant
-GROQ_BASE_URL=https://api.groq.com/openai/v1/chat/completions
-```
-
-Keep `OPENAI_API_KEY` empty when using Groq.
-
-## Intro-only mode (no Q&A)
-
-If you want the bot to only greet and never answer questions, set:
-
-```env
-INTRO_ONLY_MODE=true
-```
-
-In this mode, every turn returns only your configured intro (`GREETING_RO` / `GREETING_EN`).
 
 ---
 
@@ -121,10 +98,13 @@ In this mode, every turn returns only your configured intro (`GREETING_RO` / `GR
 - `GET /health`
 - `GET /api/skills`
 - `POST /api/simulate-turn`
+- `POST /api/actions/send-sms`
+- `POST /api/actions/schedule-call`
+- `POST /api/actions/research`
 - `POST /twilio/voice`
 - `POST /twilio/outbound`
 
-Example simulate turn:
+### Example simulate turn
 
 ```bash
 curl -X POST http://localhost:8000/api/simulate-turn \
@@ -132,24 +112,89 @@ curl -X POST http://localhost:8000/api/simulate-turn \
   -d '{"session_id":"abc","user_text":"Buna, vreau factura"}'
 ```
 
+### Example send SMS
+
+```bash
+curl -X POST http://localhost:8000/api/actions/send-sms \
+  -H "Content-Type: application/json" \
+  -d '{"to_number":"+40123456789","message":"Programarea ta a fost confirmată."}'
+```
+
+### Example schedule Google Meet / callback
+
+```bash
+curl -X POST http://localhost:8000/api/actions/schedule-call \
+  -H "Content-Type: application/json" \
+  -d '{
+    "session_id":"abc",
+    "attendee_email":"client@example.com",
+    "start_iso":"2026-03-20T10:00:00+02:00",
+    "end_iso":"2026-03-20T10:30:00+02:00",
+    "summary":"Demo call",
+    "description":"Google Meet onboarding",
+    "language":"ro"
+  }'
+```
+
+### Example web research
+
+```bash
+curl -X POST http://localhost:8000/api/actions/research \
+  -H "Content-Type: application/json" \
+  -d '{"query":"latest ecommerce pricing trends"}'
+```
+
+### Example URL inspection
+
+```bash
+curl -X POST http://localhost:8000/api/actions/research \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com"}'
+```
+
+If Google credentials are missing, the scheduling endpoint returns a **dry-run** payload with a demo Meet link so you can test the integration flow before wiring production secrets.
+If `TAVILY_API_KEY` is missing, search requests return a **dry-run** response, but direct URL inspection still works.
+
 ---
 
 ## 5) Twilio setup
 
 1. Deploy this service publicly (HTTPS).
-2. In Twilio Phone Number Voice webhook, set URL to:
-   - `https://your-domain.com/twilio/voice`
+2. In Twilio Phone Number Voice webhook, set URL to `https://your-domain.com/twilio/voice`.
 3. Set method `POST`.
 4. Fill Twilio credentials in `.env` for outbound calls.
+5. Fill `TWILIO_SMS_FROM_NUMBER` if you want SMS actions.
 
 ---
 
-## 6) Plug-and-play skills
+## 6) Where to “train” the agent
+
+This project does **not** fine-tune a model. In the current implementation, “training” means configuring the agent’s:
+
+1. **Knowledge**:
+   - edit `knowledge/faq.json`;
+   - replace the simple FAQ matcher with real RAG/vector search for production.
+2. **Behavior**:
+   - tune `BEHAVIOR_STYLE_RO` / `BEHAVIOR_STYLE_EN`;
+   - update the orchestrator prompt and escalation policy.
+3. **Actions**:
+   - connect real CRM endpoints;
+   - provide Google Calendar credentials for Meet scheduling;
+   - provide Twilio credentials for voice/SMS;
+   - provide Tavily credentials if you want external web search.
+
+For enterprise rollout, move from FAQ JSON to vector search over policy, pricing, contracts, internal support docs, and product content.
+
+---
+
+## 7) Plug-and-play skills
 
 Defined in `app/services/agent_skills.py`:
 - `sales`
 - `support`
 - `retention`
+- `scheduling`
+- `research`
 
 To add a new skill:
 1. Add class with `can_handle()` + `prompt_instruction()`.
@@ -158,17 +203,37 @@ To add a new skill:
 
 ---
 
-## 7) Database + client software integration
+## 8) Production actions included now
+
+### Send SMS
+- Endpoint: `POST /api/actions/send-sms`
+- Uses Twilio Messages API when credentials are configured.
+- Returns `dry_run` when Twilio SMS credentials are missing.
+
+### Web research / URL verification
+- Endpoint: `POST /api/actions/research`
+- Uses Tavily search when `TAVILY_API_KEY` is configured.
+- Can inspect a URL directly without a Tavily key.
+
+### Schedule Google Meet / calendar callback
+- Endpoint: `POST /api/actions/schedule-call`
+- Uses Google OAuth refresh-token flow and Calendar Events API.
+- Requests a Meet link via `conferenceData.createRequest`.
+- Returns `dry_run` when Google credentials are missing.
+
+---
+
+## 9) Database + client software integration
 
 - `DatabaseClient` uses SQLite by default (`voice_agent.db`) so deployment works immediately.
 - `CRMClient` integrates external software APIs (HubSpot/Salesforce/Zoho/custom).
-- `ToolClient` merges DB + CRM context and passes it to the LLM.
+- `ToolClient` merges DB + CRM context and now also exposes SMS, calendar, and research actions.
 
 For enterprise rollout, replace SQLite implementation with your production DB driver and schema.
 
 ---
 
-## 8) Tests
+## 10) Tests
 
 ```bash
 cd voice_agent
@@ -178,48 +243,26 @@ pytest -q
 If dependencies are unavailable in your environment, run at least syntax validation:
 
 ```bash
-python -m compileall app
+python -m compileall app tests
 ```
 
+---
 
-## Troubleshooting: Call closes after hello
+## 11) Troubleshooting: Romanian flow
 
-If the call closes after the first phrase, ensure:
-
-1. Twilio webhook is `POST` to `/twilio/voice`.
-2. You redeployed latest version (which includes a Gather+Redirect loop).
-3. Trial limitations are handled (verified caller ID).
-
-The new call loop keeps the session open:
-- `<Gather ... />`
-- fallback `<Redirect ...>/twilio/voice</Redirect>`
-
-Also use more natural voices:
-
-```env
-TWILIO_VOICE_EN=Polly.Amy-Neural
-TWILIO_VOICE_RO=Google.ro-RO-Standard-A
-```
-
-
-## Troubleshooting: doesn't respond to question (RO)
-
-If user speaks Romanian and agent repeats intro or misses intent:
+If the bot repeats the intro or doesn’t seem Romanian-first:
 
 1. Set `INTRO_ONLY_MODE=false`.
 2. Set `TWILIO_DEFAULT_LANGUAGE=ro-RO`.
-3. Keep Twilio webhook method as `POST` to `/twilio/voice`.
-4. Ensure `OPENAI_API_KEY` is set for AI responses.
+3. Set `TWILIO_VOICE_RO=Google.ro-RO-Standard-A`.
+4. Make sure `OPENAI_API_KEY` is set if you want AI-generated answers.
 
-The call loop now uses language-aware speech gather to improve recognition.
+---
 
+## 12) Next production upgrades I recommend
 
-## Troubleshooting: Twilio says system error after question
-
-This usually happens when generated text contains XML-breaking characters (`&`, `<`, `>`).
-The app now escapes TwiML speech text automatically to prevent call drops.
-
-If issue persists:
-1. Check Twilio debugger for exact error code.
-2. Confirm webhook method is `POST`.
-3. Confirm speech gather language is set (`TWILIO_DEFAULT_LANGUAGE=ro-RO` for Romanian-first flows).
+- Replace FAQ-only retrieval with pgvector/Pinecone/Weaviate RAG.
+- Add CRM write actions (create ticket, update lead, change booking state).
+- Add authenticated admin endpoints and audit logs.
+- Add real-time STT/TTS streaming beyond simple Twilio gather loops.
+- Add human handoff workflows and notification automations.
