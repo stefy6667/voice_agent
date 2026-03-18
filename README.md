@@ -84,7 +84,7 @@ Copy `.env.example` and set values:
 
 ```env
 TWILIO_VOICE_EN=Polly.Amy-Neural
-TWILIO_VOICE_RO=Google.ro-RO-Standard-A
+TWILIO_VOICE_RO=Google.ro-RO-Wavenet-B
 TWILIO_DEFAULT_LANGUAGE=ro-RO
 BEHAVIOR_STYLE_EN=Warm, friendly, concise, and natural. Use short sentences and empathy.
 BEHAVIOR_STYLE_RO=Cald, prietenos, concis și natural. Folosește propoziții scurte și empatie.
@@ -154,6 +154,8 @@ curl -X POST http://localhost:8000/api/actions/research \
 
 If Google credentials are missing, the scheduling endpoint returns a **dry-run** payload with a demo Meet link so you can test the integration flow before wiring production secrets.
 If `TAVILY_API_KEY` is missing, search requests return a **dry-run** response, but direct URL inspection still works.
+
+Direct URL inspection accepts only public `http`/`https` targets and blocks `localhost` or private-network addresses to avoid accidental internal fetches.
 
 ---
 
@@ -254,7 +256,7 @@ If the bot repeats the intro or doesn’t seem Romanian-first:
 
 1. Set `INTRO_ONLY_MODE=false`.
 2. Set `TWILIO_DEFAULT_LANGUAGE=ro-RO`.
-3. Set `TWILIO_VOICE_RO=Google.ro-RO-Standard-A`.
+3. Set `TWILIO_VOICE_RO=Google.ro-RO-Wavenet-B`.
 4. Make sure `OPENAI_API_KEY` is set if you want AI-generated answers.
 
 ---

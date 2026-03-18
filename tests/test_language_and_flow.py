@@ -257,3 +257,31 @@ def test_demo_reply_is_natural_for_business_niche():
     answer = res.json()["answer"].lower()
     assert "demo" in answer
     assert "restaurant" in answer
+
+
+def test_research_endpoint_blocks_localhost_urls():
+    res = client.post(
+        "/api/actions/research",
+        json={"url": "http://localhost/admin"},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["status"] == "blocked"
+    assert body["provider"] == "url_fetch"
+
+
+def test_simulate_turn_blocks_private_url_inspection_cleanly():
+    res = client.post(
+        "/api/simulate-turn",
+        json={"session_id": "research-blocked", "user_text": "Verifică linkul http://127.0.0.1/test"},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["actions"]
+    assert body["actions"][0]["status"] == "blocked"
+
+
+def test_default_romanian_twilio_voice_uses_wavenet():
+    from app.config import settings
+
+    assert settings.twilio_voice_ro == "Google.ro-RO-Wavenet-B"

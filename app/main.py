@@ -19,7 +19,7 @@ from app.services.integrations import build_integration_clients
 from app.services.knowledge_base import KnowledgeBase, KnowledgeMatch
 from app.services.language import LanguageDetector
 from app.services.orchestrator import OpenAILLMProvider
-from app.services.research import ResearchClient
+from app.services.research import ResearchClient, UnsafeResearchTargetError
 from app.services.session_store import SessionStore
 from app.services.telephony import TelephonyService
 from app.services.tools import ToolClient
@@ -182,7 +182,15 @@ async def build_turn_response(session_id: str, user_text: str) -> SimulateTurnRe
     actions: list[dict] = []
     if wants_web_research(user_text):
         url = extract_url(user_text)
-        research_result = await (tools.inspect_url(url) if url else tools.search_web(user_text))
+        try:
+            research_result = await (tools.inspect_url(url) if url else tools.search_web(user_text))
+        except UnsafeResearchTargetError as exc:
+            research_result = {
+                "provider": "url_fetch",
+                "configured": True,
+                "status": "blocked",
+                "message": str(exc),
+            }
         context["research"] = research_result
         actions.append(research_result)
 
@@ -297,7 +305,10 @@ async def schedule_call(payload: ScheduleMeetingRequest) -> dict:
 @app.post("/api/actions/research")
 async def research_action(payload: ResearchRequest) -> dict:
     if payload.url:
-        return await tools.inspect_url(payload.url)
+        try:
+            return await tools.inspect_url(payload.url)
+        except UnsafeResearchTargetError as exc:
+            return {"status": "blocked", "provider": "url_fetch", "message": str(exc)}
     if payload.query:
         return await tools.search_web(payload.query)
     return {"status": "error", "message": "Provide either query or url."}

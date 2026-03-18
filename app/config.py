@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     twilio_from_number: str = ""
     twilio_sms_from_number: str = ""
     twilio_voice_en: str = "Polly.Amy-Neural"
-    twilio_voice_ro: str = "Google.ro-RO-Standard-A"
+    twilio_voice_ro: str = "Google.ro-RO-Wavenet-B"
 
     # Conversation behavior
     behavior_style_en: str = "Warm, friendly, concise, and natural. Use short sentences and empathy."
