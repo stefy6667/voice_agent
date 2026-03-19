@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     twilio_sms_from_number: str = ""
     twilio_voice_en: str = "Polly.Amy-Neural"
     twilio_voice_ro: str = "Google.ro-RO-Wavenet-B"
+    twilio_record_calls: bool = False
+    twilio_recording_status_callback: str = ""
     tts_provider_ro: str = "elevenlabs"  # twilio | elevenlabs
     elevenlabs_api_key: str = ""
     elevenlabs_voice_id_ro: str = "EXAVITQu4vr4xnSDxMaL"
@@ -64,6 +66,7 @@ class Settings(BaseSettings):
     tavily_base_url: str = "https://api.tavily.com"
     web_search_max_results: int = 3
     website_context_url: str = ""
+    website_context_mode: str = "faq_only"  # faq_only | on_demand | always
 
     # Operations
     human_handoff_number: str = ""

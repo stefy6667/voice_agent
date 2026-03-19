@@ -26,3 +26,16 @@ class SessionStore:
     def get_recent_turns(self, session_id: str) -> list[dict[str, str]]:
         session = self._sessions.get(session_id, {})
         return list(session.get("turns", []))
+
+    def append_recording(self, session_id: str, recording: dict) -> None:
+        session = self._sessions.setdefault(session_id, {})
+        recordings = session.setdefault("recordings", [])
+        recordings.append(recording)
+
+    def get_recordings(self, session_id: str) -> list[dict]:
+        session = self._sessions.get(session_id, {})
+        return list(session.get("recordings", []))
+
+    def build_transcript_text(self, session_id: str) -> str:
+        turns = self.get_recent_turns(session_id)
+        return "\n".join(f"{turn['role']}: {turn['text']}" for turn in turns)

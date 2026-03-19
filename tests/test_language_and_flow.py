@@ -1,4 +1,6 @@
 from fastapi.testclient import TestClient
+from pathlib import Path
+import tempfile
 
 from app.main import app, kb, research, telephony
 
@@ -344,6 +346,7 @@ def test_website_context_url_is_used_when_needed():
     from app.config import settings
 
     original_url = settings.website_context_url
+    original_mode = settings.website_context_mode
     original_method = research.inspect_url
 
     async def fake_inspect(url: str):
@@ -357,6 +360,7 @@ def test_website_context_url_is_used_when_needed():
         }
 
     settings.website_context_url = "https://example.com/menu"
+    settings.website_context_mode = "on_demand"
     research.inspect_url = fake_inspect
     try:
         res = client.post(
@@ -370,6 +374,7 @@ def test_website_context_url_is_used_when_needed():
     finally:
         research.inspect_url = original_method
         settings.website_context_url = original_url
+        settings.website_context_mode = original_mode
 
 
 def test_restaurant_demo_reply_is_concrete_and_actionable():
@@ -407,3 +412,96 @@ def test_sales_demo_question_uses_english_kb_and_stays_natural():
     assert body["source"] == "knowledge_base"
     assert "demo" in body["answer"].lower()
     assert "business" in body["answer"].lower()
+
+
+def test_transcript_endpoint_returns_recent_turns():
+    client.post(
+        "/api/simulate-turn",
+        json={"session_id": "transcript-1", "user_text": "Hello, I want a demo"},
+    )
+    res = client.get("/api/transcript/transcript-1")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["session_id"] == "transcript-1"
+    assert body["turns"]
+    assert "user:" in body["transcript"]
+
+
+def test_recording_status_webhook_saves_metadata():
+    res = client.post(
+        "/twilio/recording-status",
+        data={
+            "CallSid": "CA-REC-1",
+            "RecordingSid": "RE123",
+            "RecordingUrl": "https://api.twilio.com/recordings/RE123",
+            "RecordingStatus": "completed",
+            "RecordingDuration": "42",
+        },
+    )
+    assert res.status_code == 200
+
+    transcript = client.get("/api/transcript/CA-REC-1")
+    assert transcript.status_code == 200
+    recordings = transcript.json()["recordings"]
+    assert recordings
+    assert recordings[0]["recording_sid"] == "RE123"
+
+
+def test_website_context_mode_faq_only_does_not_fetch_site():
+    from app.config import settings
+
+    original_url = settings.website_context_url
+    original_mode = settings.website_context_mode
+    original_method = research.inspect_url
+
+    async def fail_if_called(url: str):
+        raise AssertionError(f"inspect_url should not be called in faq_only mode: {url}")
+
+    settings.website_context_url = "https://example.com/menu"
+    settings.website_context_mode = "faq_only"
+    research.inspect_url = fail_if_called
+    try:
+        res = client.post(
+            "/api/simulate-turn",
+            json={"session_id": "faq-only", "user_text": "What products do you sell?"},
+        )
+        assert res.status_code == 200
+    finally:
+        research.inspect_url = original_method
+        settings.website_context_url = original_url
+        settings.website_context_mode = original_mode
+
+
+def test_import_website_faq_generates_extra_faq_file():
+    from app.config import settings
+
+    original_url = settings.website_context_url
+    original_generated_path = kb.generated_path
+    original_method = research.inspect_url
+
+    async def fake_inspect(url: str):
+        return {
+            "provider": "url_fetch",
+            "configured": True,
+            "status": "ok",
+            "url": url,
+            "title": "AI Agents Website",
+            "summary": "We build AI agents and bots for lead generation, support, and booking.",
+        }
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        kb.generated_path = Path(tmpdir) / "website_faq.json"
+        settings.website_context_url = "https://example.com"
+        research.inspect_url = fake_inspect
+        try:
+            res = client.post("/api/actions/import-website-faq")
+            assert res.status_code == 200
+            body = res.json()
+            assert body["status"] == "ok"
+            assert body["generated_items"] == 3
+            assert kb.generated_path.exists()
+        finally:
+            research.inspect_url = original_method
+            settings.website_context_url = original_url
+            kb.generated_path = original_generated_path
+            kb.reload()

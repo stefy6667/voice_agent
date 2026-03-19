@@ -70,14 +70,14 @@ Copy `.env.example` and set values:
 - Behavior style:
   - `BEHAVIOR_STYLE_EN`, `BEHAVIOR_STYLE_RO`
 - Twilio:
-  - `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`, `TWILIO_SMS_FROM_NUMBER`, `TWILIO_VOICE_EN`, `TWILIO_VOICE_RO`, `TWILIO_DEFAULT_LANGUAGE`
+  - `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`, `TWILIO_SMS_FROM_NUMBER`, `TWILIO_VOICE_EN`, `TWILIO_VOICE_RO`, `TWILIO_RECORD_CALLS`, `TWILIO_RECORDING_STATUS_CALLBACK`, `TWILIO_DEFAULT_LANGUAGE`
   - `TTS_PROVIDER_RO`, `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID_RO`, `ELEVENLABS_MODEL_ID`, `ELEVENLABS_OUTPUT_FORMAT`
 - Integrations:
   - `DATABASE_URL`, `CRM_API_BASE_URL`, `CRM_API_KEY`
 - Google Calendar / Meet:
   - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, `GOOGLE_CALENDAR_ID`, `GOOGLE_CALENDAR_TIMEZONE`
 - Web research:
-  - `TAVILY_API_KEY`, `TAVILY_BASE_URL`, `WEB_SEARCH_MAX_RESULTS`, `WEBSITE_CONTEXT_URL`
+  - `TAVILY_API_KEY`, `TAVILY_BASE_URL`, `WEB_SEARCH_MAX_RESULTS`, `WEBSITE_CONTEXT_URL`, `WEBSITE_CONTEXT_MODE`
 - Operations:
   - `HUMAN_HANDOFF_NUMBER`, `ADMIN_ALERT_EMAIL`
 
@@ -107,12 +107,15 @@ When `TTS_PROVIDER_RO=elevenlabs` and `ELEVENLABS_API_KEY` is configured, Romani
 
 - `GET /health`
 - `GET /api/skills`
+- `GET /api/transcript/{session_id}`
 - `POST /api/simulate-turn`
 - `POST /api/actions/send-sms`
 - `POST /api/actions/schedule-call`
 - `POST /api/actions/research`
+- `POST /api/actions/import-website-faq`
 - `POST /twilio/voice`
 - `POST /twilio/outbound`
+- `POST /twilio/recording-status`
 - `GET /api/tts/{token}`
 
 ### Example simulate turn
@@ -168,6 +171,7 @@ If `TAVILY_API_KEY` is missing, search requests return a **dry-run** response, b
 
 Direct URL inspection accepts only public `http`/`https` targets and blocks `localhost` or private-network addresses to avoid accidental internal fetches.
 If `WEBSITE_CONTEXT_URL` is configured, the agent can fetch that page automatically when the user asks for product/menu/site details and there is no strong FAQ match.
+Use `WEBSITE_CONTEXT_MODE=faq_only` to rely only on the FAQ file, `WEBSITE_CONTEXT_MODE=on_demand` to read the website only when needed, or `WEBSITE_CONTEXT_MODE=always` to prefer website context whenever the FAQ has no strong match.
 
 ---
 

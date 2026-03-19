@@ -55,21 +55,28 @@ class TelephonyService:
                 "business": settings.business_name,
                 "preview_message": full_message,
                 "status": "dry_run",
+                "recording_enabled": settings.twilio_record_calls,
             }
 
         speech_verb = await self.twiml_verb(full_message, language)
         twiml = f"<Response>{speech_verb}<Pause length=\"1\"/></Response>"
         auth = self._basic_auth()
+        payload = {
+            "To": to_number,
+            "From": settings.twilio_from_number,
+            "Twiml": twiml,
+        }
+        if settings.twilio_record_calls:
+            payload["Record"] = "true"
+            if settings.twilio_recording_status_callback:
+                payload["RecordingStatusCallback"] = settings.twilio_recording_status_callback
+                payload["RecordingStatusCallbackEvent"] = "completed"
 
         async with httpx.AsyncClient(timeout=20) as client:
             response = await client.post(
                 f"https://api.twilio.com/2010-04-01/Accounts/{settings.twilio_account_sid}/Calls.json",
                 headers={"Authorization": f"Basic {auth}"},
-                data={
-                    "To": to_number,
-                    "From": settings.twilio_from_number,
-                    "Twiml": twiml,
-                },
+                data=payload,
             )
             response.raise_for_status()
             body = response.json()
@@ -82,6 +89,7 @@ class TelephonyService:
             "business": settings.business_name,
             "status": body.get("status", "queued"),
             "sid": body.get("sid"),
+            "recording_enabled": settings.twilio_record_calls,
         }
 
     async def send_sms(self, to_number: str, message: str) -> dict:

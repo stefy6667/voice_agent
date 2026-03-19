@@ -2,6 +2,7 @@ import re
 
 from fastapi import FastAPI, Form, HTTPException
 from fastapi.responses import PlainTextResponse, Response
+import json
 
 from app.config import settings
 from app.models import (
@@ -234,6 +235,9 @@ def should_fetch_website_context(
 ) -> bool:
     if not settings.website_context_url:
         return False
+    mode = settings.website_context_mode.lower().strip()
+    if mode == "faq_only":
+        return False
     lowered = user_text.lower()
     markers = [
         "site",
@@ -249,10 +253,12 @@ def should_fetch_website_context(
         "detalii",
         "details",
     ]
+    explicit_request = wants_web_research(user_text) or any(marker in lowered for marker in markers)
+    if mode == "always":
+        return kb_match is None
     return kb_match is None and (
-        wants_web_research(user_text)
+        explicit_request
         or active_skill_name in {"sales", "scheduling"}
-        or any(marker in lowered for marker in markers)
     )
 
 
@@ -420,6 +426,16 @@ async def list_skills() -> dict:
     return {"skills": skill_registry.list_skills()}
 
 
+@app.get("/api/transcript/{session_id}")
+async def get_transcript(session_id: str) -> dict:
+    return {
+        "session_id": session_id,
+        "turns": sessions.get_recent_turns(session_id),
+        "recordings": sessions.get_recordings(session_id),
+        "transcript": sessions.build_transcript_text(session_id),
+    }
+
+
 @app.post("/api/simulate-turn", response_model=SimulateTurnResponse)
 async def simulate_turn(payload: SimulateTurnRequest) -> SimulateTurnResponse:
     return await build_turn_response(payload.session_id, payload.user_text)
@@ -459,6 +475,56 @@ async def research_action(payload: ResearchRequest) -> dict:
     return {"status": "error", "message": "Provide either query or url."}
 
 
+@app.post("/api/actions/import-website-faq")
+async def import_website_faq() -> dict:
+    if not settings.website_context_url:
+        return {"status": "error", "message": "Set WEBSITE_CONTEXT_URL before importing website FAQ content."}
+
+    try:
+        website_result = await tools.inspect_url(settings.website_context_url)
+    except UnsafeResearchTargetError as exc:
+        return {"status": "blocked", "provider": "url_fetch", "message": str(exc)}
+
+    summary = website_result.get("summary") or website_result.get("title") or ""
+    title = website_result.get("title") or settings.website_context_url
+    generated_items = [
+        {
+            "id": "website_context_overview_en",
+            "language": "en",
+            "question": "What does your website say?",
+            "answer": summary,
+            "source": "website_context",
+        },
+        {
+            "id": "website_services_en",
+            "language": "en",
+            "question": "What services do you offer?",
+            "answer": summary,
+            "source": "website_context",
+        },
+        {
+            "id": "website_products_en",
+            "language": "en",
+            "question": "What do you sell on your website?",
+            "answer": summary,
+            "source": "website_context",
+        },
+    ]
+    kb.generated_path.write_text(
+        json.dumps(generated_items, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    kb.reload()
+    return {
+        "status": "ok",
+        "provider": "url_fetch",
+        "url": settings.website_context_url,
+        "title": title,
+        "generated_items": len(generated_items),
+        "output_path": str(kb.generated_path.relative_to(kb.base_dir)),
+    }
+
+
 @app.post("/twilio/voice", response_class=PlainTextResponse)
 async def twilio_voice(
     CallSid: str = Form(default=""),
@@ -495,6 +561,25 @@ async def twilio_voice(
 @app.post("/twilio/outbound")
 async def outbound_call(payload: TwilioOutboundRequest) -> dict:
     return await telephony.create_outbound_call(payload.to_number, payload.message, payload.language)
+
+
+@app.post("/twilio/recording-status")
+async def recording_status(
+    CallSid: str = Form(default=""),
+    RecordingSid: str = Form(default=""),
+    RecordingUrl: str = Form(default=""),
+    RecordingStatus: str = Form(default=""),
+    RecordingDuration: str = Form(default=""),
+) -> dict:
+    session_id = CallSid or "unknown-call"
+    recording = {
+        "recording_sid": RecordingSid,
+        "recording_url": RecordingUrl,
+        "status": RecordingStatus,
+        "duration": RecordingDuration,
+    }
+    sessions.append_recording(session_id, recording)
+    return {"ok": True, "session_id": session_id, "recording": recording}
 
 
 @app.get("/api/tts/{token}")
