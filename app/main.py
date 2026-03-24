@@ -15,6 +15,7 @@ from app.models import (
 )
 from app.services.agent_skills import SkillRegistry
 from app.services.calendar import CalendarClient
+from app.services.event_catalog import EventCatalogClient
 from app.services.integrations import build_integration_clients
 from app.services.knowledge_base import KnowledgeBase, KnowledgeMatch
 from app.services.language import LanguageDetector
@@ -35,7 +36,8 @@ db_client, crm_client = build_integration_clients()
 telephony = TelephonyService()
 calendar = CalendarClient()
 research = ResearchClient()
-tools = ToolClient(db_client, crm_client, telephony, calendar, research)
+event_catalog = EventCatalogClient(settings.events_source_url, settings.events_max_results)
+tools = ToolClient(db_client, crm_client, telephony, calendar, research, event_catalog)
 
 
 def build_intro(language: str) -> str:
@@ -99,6 +101,52 @@ def wants_outbound_call(text: str) -> bool:
     return any(marker in lowered for marker in markers)
 
 
+def wants_event_info(text: str) -> bool:
+    lowered = text.lower()
+    markers = [
+        "event",
+        "events",
+        "concert",
+        "concerte",
+        "show",
+        "festival",
+        "upcoming",
+        "ce evenimente",
+        "what events",
+        "tickets",
+        "bilete",
+    ]
+    return any(marker in lowered for marker in markers)
+
+
+def should_fetch_events(user_text: str) -> bool:
+    if not settings.events_source_url:
+        return False
+    mode = settings.events_context_mode.lower().strip()
+    if mode == "off":
+        return False
+    if mode == "always":
+        return True
+    return wants_event_info(user_text)
+
+
+def wants_ticket_link_sms(text: str) -> bool:
+    lowered = text.lower()
+    markers = [
+        "ticket link",
+        "buy ticket",
+        "buy tickets",
+        "link by sms",
+        "send link",
+        "trimite link",
+        "trimite-mi link",
+        "link de bilete",
+        "bilet",
+        "tickets by sms",
+    ]
+    return any(marker in lowered for marker in markers)
+
+
 def build_outbound_message(language: str, skill_name: str | None) -> str:
     if language == "ro":
         if skill_name == "sales":
@@ -107,6 +155,42 @@ def build_outbound_message(language: str, skill_name: str | None) -> str:
     if skill_name == "sales":
         return "I’m calling back with the best-fit offer and the next steps."
     return "I’m calling back shortly so we can continue the conversation."
+
+
+def build_events_reply(language: str, events_result: dict) -> str:
+    events = events_result.get("events", [])
+    if not events:
+        if language == "ro":
+            return "Suntem un business de evenimente și momentan nu am găsit evenimente disponibile pe site. Dacă vrei, verific din nou sau îți pot trimite direct linkul principal de bilete."
+        return "We are an event business and I couldn't find available events on the website right now. If you want, I can check again or send you the main ticket link."
+
+    top_events = events[:3]
+    if language == "ro":
+        parts = []
+        for item in top_events:
+            date_label = f" — {item['date']}" if item.get("date") else ""
+            parts.append(f"{item['title']}{date_label}")
+        return (
+            "Suntem un business de evenimente și în prezent găzduim următoarele evenimente, ordonate după dată: "
+            + "; ".join(parts)
+            + ". Dacă vrei, îți trimit imediat pe SMS linkul de cumpărare pentru unul dintre ele."
+        )
+
+    parts = []
+    for item in top_events:
+        date_label = f" — {item['date']}" if item.get("date") else ""
+        parts.append(f"{item['title']}{date_label}")
+    return (
+        "We are an event business and we currently host these events, sorted by date: "
+        + "; ".join(parts)
+        + ". If you want, I can send you the ticket purchase link by SMS right away."
+    )
+
+
+def build_ticket_link_sms(language: str, event_title: str, event_url: str) -> str:
+    if language == "ro":
+        return f"Link bilete pentru {event_title}: {event_url}"
+    return f"Ticket link for {event_title}: {event_url}"
 
 
 def wants_sms(text: str) -> bool:
@@ -309,6 +393,16 @@ async def build_turn_response(session_id: str, user_text: str) -> SimulateTurnRe
 
     context = await tools.get_customer_context(session_id)
     actions: list[dict] = []
+    event_result = None
+    if should_fetch_events(user_text):
+        event_result = await tools.list_events()
+        context["events"] = event_result
+        actions.append(event_result)
+        top_event = next((item for item in event_result.get("events", []) if item.get("url")), None)
+        if top_event:
+            sessions.set_value(session_id, "last_event_title", top_event.get("title", "event"))
+            sessions.set_value(session_id, "last_event_link", top_event["url"])
+
     if wants_web_research(user_text):
         url = extract_url(user_text)
         try:
@@ -349,13 +443,18 @@ async def build_turn_response(session_id: str, user_text: str) -> SimulateTurnRe
     sms_target = phone_number or caller_number
     sms_action = None
     if sms_target and wants_sms(user_text):
+        last_event_link = sessions.get_value(session_id, "last_event_link")
+        last_event_title = sessions.get_value(session_id, "last_event_title") or "event"
+        sms_message = build_dynamic_sms_message(
+            detection.language,
+            active_skill.name if active_skill else None,
+            history,
+        )
+        if wants_ticket_link_sms(user_text) and last_event_link:
+            sms_message = build_ticket_link_sms(detection.language, last_event_title, last_event_link)
         sms_action = await tools.send_sms(
             sms_target,
-            build_dynamic_sms_message(
-                detection.language,
-                active_skill.name if active_skill else None,
-                history,
-            ),
+            sms_message,
         )
         actions.append(sms_action)
 
@@ -381,6 +480,8 @@ async def build_turn_response(session_id: str, user_text: str) -> SimulateTurnRe
             answer = build_sms_confirmation(detection.language, sms_target, sms_action.get("status", "queued"))
         elif outbound_action is not None:
             answer = build_outbound_confirmation(detection.language, phone_number, outbound_action.get("status", "queued"))
+        elif event_result is not None:
+            answer = build_events_reply(detection.language, event_result)
         else:
             answer = await llm.generate(
                 user_text,
@@ -390,7 +491,7 @@ async def build_turn_response(session_id: str, user_text: str) -> SimulateTurnRe
                 skill_instruction,
                 history,
             )
-        source = "knowledge_base" if kb_match else ("action" if (sms_action or outbound_action) else ("research" if actions else "llm"))
+        source = "knowledge_base" if kb_match else ("action" if (sms_action or outbound_action) else ("events" if event_result is not None else ("research" if actions else "llm")))
         citations = [kb_match.source] if kb_match else []
 
     sessions.append_turn(session_id, "assistant", answer)
@@ -434,6 +535,11 @@ async def get_transcript(session_id: str) -> dict:
         "recordings": sessions.get_recordings(session_id),
         "transcript": sessions.build_transcript_text(session_id),
     }
+
+
+@app.get("/api/events")
+async def get_events() -> dict:
+    return await tools.list_events()
 
 
 @app.post("/api/simulate-turn", response_model=SimulateTurnResponse)

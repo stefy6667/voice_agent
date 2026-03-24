@@ -1,4 +1,5 @@
 from app.services.calendar import CalendarClient
+from app.services.event_catalog import EventCatalogClient
 from app.services.integrations import CRMClient, DatabaseClient
 from app.services.research import ResearchClient
 from app.services.telephony import TelephonyService
@@ -12,12 +13,14 @@ class ToolClient:
         telephony: TelephonyService,
         calendar: CalendarClient,
         research: ResearchClient,
+        events: EventCatalogClient | None = None,
     ) -> None:
         self.db = db
         self.crm = crm
         self.telephony = telephony
         self.calendar = calendar
         self.research = research
+        self.events = events
 
     async def get_customer_context(self, session_id: str) -> dict:
         profile = await self.db.fetch_customer_profile(session_id)
@@ -52,3 +55,12 @@ class ToolClient:
 
     async def inspect_url(self, url: str) -> dict:
         return await self.research.inspect_url(url)
+
+    async def list_events(self) -> dict:
+        if self.events is None:
+            return {
+                "provider": "event_catalog",
+                "status": "disabled",
+                "events": [],
+            }
+        return await self.events.list_events()

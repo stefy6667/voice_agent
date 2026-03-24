@@ -17,6 +17,7 @@ Deploy-ready FastAPI service for a customer support voice agent that:
 - Sample FAQ now includes both support examples and sales-oriented entries for product overview, pricing, value, and demo questions.
 - **Dynamic SMS summaries** built from recent conversation details such as reservation date, hour, and guest count when available.
 - **Research actions** for URL inspection and optional web search.
+- **Event listing support** for event businesses, including website event fetches sorted by date and ticket-link SMS follow-up.
 - **Sales-oriented prompting** for discovery, value framing, and next-step closing.
 - **DB integration ready** with a default **SQLite** implementation that works out-of-the-box.
 - **CRM API connector** for external software.
@@ -78,6 +79,7 @@ Copy `.env.example` and set values:
   - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, `GOOGLE_CALENDAR_ID`, `GOOGLE_CALENDAR_TIMEZONE`
 - Web research:
   - `TAVILY_API_KEY`, `TAVILY_BASE_URL`, `WEB_SEARCH_MAX_RESULTS`, `WEBSITE_CONTEXT_URL`, `WEBSITE_CONTEXT_MODE`
+  - `EVENTS_SOURCE_URL`, `EVENTS_MAX_RESULTS`, `EVENTS_CONTEXT_MODE`
 - Operations:
   - `HUMAN_HANDOFF_NUMBER`, `ADMIN_ALERT_EMAIL`
 
@@ -113,6 +115,7 @@ When `TTS_PROVIDER_RO=elevenlabs` and `ELEVENLABS_API_KEY` is configured, Romani
 - `POST /api/actions/schedule-call`
 - `POST /api/actions/research`
 - `POST /api/actions/import-website-faq`
+- `GET /api/events` *(via `/api/simulate-turn` event prompts or by wiring a dedicated endpoint later)*
 - `POST /twilio/voice`
 - `POST /twilio/outbound`
 - `POST /twilio/recording-status`

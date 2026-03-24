@@ -50,5 +50,12 @@
     "question": "Why should I buy this AI agent?",
     "answer": "The AI agent acts like a sales and support teammate: it can respond instantly, capture leads, qualify demand, book meetings, send confirmations, and stay available without sounding robotic.",
     "source": "value"
+  },
+  {
+    "id": "event_client_product_en",
+    "language": "en",
+    "question": "What can this event bot do?",
+    "answer": "This event bot can explain upcoming events, sort events by date, answer questions naturally, and send ticket purchase links by SMS so customers can buy faster.",
+    "source": "event_bot"
   }
 ]

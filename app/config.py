@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     behavior_style_ro: str = "Cald, prietenos, concis și natural. Folosește propoziții scurte și empatie."
 
     # Speech recognition behavior
-    twilio_default_language: str = "ro-RO"
+    twilio_default_language: str = "en-US"
 
     # Data integrations
     database_url: str = "sqlite:///./voice_agent.db"
@@ -67,6 +67,9 @@ class Settings(BaseSettings):
     web_search_max_results: int = 3
     website_context_url: str = ""
     website_context_mode: str = "faq_only"  # faq_only | on_demand | always
+    events_source_url: str = "https://www.iabilet.ro/"
+    events_max_results: int = 5
+    events_context_mode: str = "always"  # off | on_demand | always
 
     # Operations
     human_handoff_number: str = ""
