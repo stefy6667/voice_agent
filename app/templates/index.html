@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>QR Studio</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <main class="shell">
+    <section class="hero glass">
+      <div>
+        <span class="eyebrow">Render-ready QR experience studio</span>
+        <h1>Generezi QR-uri, clientul personalizează conținutul oricând.</h1>
+        <p>Fluxul este exact cum ai cerut: tu creezi codul, îl descarci PNG, clientul scanează, configurează, salvează, iar la scanările următoare vede conținutul salvat. Cu butonul de editare și codul unic poate relua procesul oricând.</p>
+      </div>
+      <form class="admin-card" method="post" action="/api/admin/create">
+        <label>Codul tău de admin</label>
+        <input type="password" name="admin_code" placeholder="ADMIN_ACCESS_CODE" required>
+        <button type="submit">Generează QR nou</button>
+        <small>{{ admin_code_hint }}</small>
+      </form>
+    </section>
+
+    <section class="dashboard glass">
+      <div class="section-header">
+        <h2>Codurile tale generate</h2>
+        <p>Doar cine are codul tău de admin poate crea noi QR-uri. Fiecare cod are un token unic de editare pentru client.</p>
+      </div>
+      <div class="cards">
+        {% for item in items %}
+        <article class="card">
+          <img src="/api/qr/{{ item.slug }}.png" alt="QR code {{ item.slug }}">
+          <div>
+            <h3>{{ item.content.headline }}</h3>
+            <p><strong>Slug:</strong> {{ item.slug }}</p>
+            <p><strong>Cod editare:</strong> {{ item.edit_code }}</p>
+            <p><strong>Public:</strong> <a href="/p/{{ item.slug }}">/p/{{ item.slug }}</a></p>
+            <p><strong>Editor:</strong> <a href="/edit/{{ item.slug }}">/edit/{{ item.slug }}</a></p>
+            <a class="button secondary" href="/api/qr/{{ item.slug }}.png">Download PNG</a>
+          </div>
+        </article>
+        {% else %}
+        <div class="empty">Nu ai generat încă niciun QR.</div>
+        {% endfor %}
+      </div>
+    </section>
+  </main>
+</body>
+</html>

@@ -59,22 +59,6 @@ class MockLLMProvider:
                 "Dacă vrei, îl transformăm imediat într-un pas concret pentru situația ta."
             )
 
-        if "pricing" in source:
-            return (
-                "Yes — the personalized AI agent bot is priced at 5000 dollars, "
-                "and the ongoing maintenance and hosting fee is 25 dollars per month. "
-                "If you want, I can also show you what that would look like for your business in a live demo."
-            )
-        if "demo" in source:
-            return (
-                "The demo is tailored to your business. "
-                "I can simulate how the agent would greet your customer, qualify the request, answer naturally, and move the conversation toward booking, follow-up, or closing."
-            )
-        if "ai_agent" in source or "value" in source:
-            return (
-                "We sell custom AI agents and bots for businesses. "
-                "They can answer leads, qualify requests, automate support, send SMS follow-ups, and handle demos in a natural way so the customer clearly sees the value."
-            )
         if "invoice" in source:
             return (
                 "Yes, I can help with the invoice. From the information I have, the invoice is usually sent by email after payment confirmation, "
@@ -90,67 +74,8 @@ class MockLLMProvider:
             "If you want, I can turn that into a concrete next step for your case."
         )
 
-
     @staticmethod
-    def _demo_reply(user_text: str, language: str, context: dict | None = None) -> str:
-        lowered = user_text.lower()
-        niche = "your business"
-        website_summary = ""
-        if isinstance(context, dict):
-            website_summary = (context.get("website_context") or {}).get("summary", "")
-
-        restaurant_markers = ["restaurant", "rezerv", "masa", "booking", "table", "menu"]
-        if any(marker in lowered for marker in restaurant_markers):
-            if language == "ro":
-                base = (
-                    "Sigur — iată un demo scurt și natural pentru rezervare la restaurant. "
-                    "Client: «Bună, vreau o masă pentru 4 persoane vineri la 19:30.» "
-                    "Agent: «Sigur, te ajut imediat. Confirm rezervarea pentru 4 persoane, vineri, la 19:30. "
-                    "Pe ce nume fac rezervarea?» "
-                    "Client: «Pe numele Andrei.» "
-                    "Agent: «Perfect. Am notat rezervarea pe numele Andrei și îți trimit acum un SMS de confirmare cu data, ora și numărul de persoane.»"
-                )
-                if website_summary:
-                    return f"{base} Pe site am văzut și context util: {website_summary[:180]}"
-                return base
-
-            base = (
-                "Sure — here is a short, natural restaurant reservation demo. "
-                "Customer: «Hi, I need a table for 4 on Friday at 7:30 PM.» "
-                "Agent: «Absolutely, I can help with that. I’m confirming a reservation for 4 guests on Friday at 7:30 PM. "
-                "What name should I place it under?» "
-                "Customer: «Andrei.» "
-                "Agent: «Perfect. I’ve noted the booking under Andrei and I’m sending an SMS confirmation now with the date, time, and party size.»"
-            )
-            if website_summary:
-                return f"{base} I also checked the configured website and found: {website_summary[:180]}"
-            return base
-
-        if language == "ro":
-            for marker in ["pentru ", "despre "]:
-                if marker in lowered:
-                    niche = user_text[lowered.index(marker) + len(marker):].strip(" .?!") or niche
-                    break
-            return (
-                f"Sigur — îți fac un demo natural pentru zona {niche}. Imaginează-ți că sună un client, agentul răspunde, înțelege intenția, "
-                "confirmă rapid detaliile importante, propune intervalul potrivit sau oferta potrivită, apoi trimite SMS ori programează următorul pas fără să pară un robot."
-            )
-
-        for marker in ["for ", "about "]:
-            if marker in lowered:
-                niche = user_text[lowered.index(marker) + len(marker):].strip(" .?!") or niche
-                break
-        return (
-            f"Sure — here is a natural demo for the {niche} niche. Imagine a customer calling in, the agent answers naturally, understands the intent, "
-            "confirms the important details, proposes the right slot or offer, and then sends an SMS or books the next step without sounding robotic."
-        )
-
-    @staticmethod
-    def _natural_reply(user_text: str, language: str, skill_instruction: str | None, context: dict | None = None) -> str:
-        lowered = user_text.lower()
-        if "demo" in lowered or "demonstra" in lowered or "demonstre" in lowered:
-            return MockLLMProvider._demo_reply(user_text, language, context)
-
+    def _natural_reply(user_text: str, language: str, skill_instruction: str | None) -> str:
         if language == "ro":
             if skill_instruction and "SALES" in skill_instruction:
                 return (
@@ -183,19 +108,12 @@ class MockLLMProvider:
     ) -> str:
         history = conversation_history or []
         research = context.get("research") if isinstance(context, dict) else None
-        website_context = context.get("website_context") if isinstance(context, dict) else None
 
         if research and research.get("status") in {"ok", "dry_run"}:
             summary = research.get("summary") or research.get("title") or ""
             if language == "ro":
                 return f"Am verificat informația și iată pe scurt ce am găsit: {summary}"
             return f"I checked the information and here is the short version: {summary}"
-
-        if website_context and website_context.get("status") == "ok":
-            summary = website_context.get("summary") or website_context.get("title") or ""
-            if language == "ro":
-                return f"Am verificat site-ul configurat și iată ce este relevant: {summary}"
-            return f"I checked the configured website and here is the relevant information: {summary}"
 
         if kb_match and kb_match.confidence >= 0.6:
             repeated = self._already_answered_kb(history, kb_match)
@@ -208,7 +126,7 @@ class MockLLMProvider:
             citation = f" (Sursă: {kb_match.source})" if language == "ro" else f" (Source: {kb_match.source})"
             return f"{grounded}{citation}"
 
-        return self._natural_reply(user_text, language, skill_instruction, context)
+        return self._natural_reply(user_text, language, skill_instruction)
 
 
 class OpenAILLMProvider:

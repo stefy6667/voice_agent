@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Editează {{ record.slug }}</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body class="theme-{{ record.content.theme }}">
+  <main class="editor-layout">
+    <section class="glass editor-panel">
+      <h1>Personalizează codul QR</h1>
+      <p>Clientul introduce codul alfanumeric primit, apoi poate modifica textul, culorile, fontul, poza și video-ul de câte ori dorește.</p>
+
+      {% if not unlocked %}
+      <form method="post" action="/unlock/{{ record.slug }}" class="unlock-form">
+        <label>Cod alfanumeric de editare</label>
+        <input type="text" name="code" placeholder="ex: {{ record.edit_code }}" required>
+        <button type="submit">Deblochează editorul</button>
+      </form>
+      {% else %}
+      <form class="editor-form" method="post" action="/api/qr/{{ record.slug }}/content" enctype="multipart/form-data">
+        <input type="hidden" name="edit_code" value="{{ provided_code }}">
+        <label>Titlu</label>
+        <input type="text" name="headline" value="{{ record.content.headline }}" required>
+        <label>Text</label>
+        <textarea name="body_text" rows="5" required>{{ record.content.body_text }}</textarea>
+        <label>Text buton</label>
+        <input type="text" name="button_label" value="{{ record.content.button_label }}" required>
+        <div class="grid-two">
+          <div>
+            <label>Temă</label>
+            <select name="theme">
+              {% for theme in ['aurora','midnight','sunset'] %}
+              <option value="{{ theme }}" {% if record.content.theme == theme %}selected{% endif %}>{{ theme }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label>Font</label>
+            <select name="font_family">
+              {% for font in ['Inter','Georgia','Verdana'] %}
+              <option value="{{ font }}" {% if record.content.font_family == font %}selected{% endif %}>{{ font }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="grid-two">
+          <div>
+            <label>Aliniere text</label>
+            <select name="text_align">
+              {% for align in ['left','center'] %}
+              <option value="{{ align }}" {% if record.content.text_align == align %}selected{% endif %}>{{ align }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label>Link video embed</label>
+            <input type="url" name="video_url" value="{{ record.content.video_url or '' }}">
+          </div>
+        </div>
+        <div class="grid-two">
+          <div>
+            <label>Culoare accent</label>
+            <input type="color" name="accent_color" value="{{ record.content.accent_color }}">
+          </div>
+          <div>
+            <label>Culoare text</label>
+            <input type="color" name="text_color" value="{{ record.content.text_color }}">
+          </div>
+        </div>
+        <label>Poza clientului</label>
+        <input type="file" name="image" accept="image/*">
+        <button type="submit">Salvează experiența</button>
+      </form>
+      {% endif %}
+    </section>
+
+    <section class="glass preview-panel">
+      <span class="eyebrow">Preview</span>
+      <h2>{{ record.content.headline }}</h2>
+      <p>{{ record.content.body_text }}</p>
+      {% if record.content.image_path %}<img class="hero-image" src="{{ record.content.image_path }}" alt="preview">{% endif %}
+      <a class="button" href="/p/{{ record.slug }}">Vezi pagina publică</a>
+    </section>
+  </main>
+</body>
+</html>

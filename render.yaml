@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: voice-agent
+    name: qr-studio
     env: docker
     plan: starter
     autoDeploy: true

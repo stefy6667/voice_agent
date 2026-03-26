@@ -13,20 +13,9 @@ class KnowledgeMatch:
 class KnowledgeBase:
     def __init__(self, path: str = "knowledge/faq.json") -> None:
         base_dir = Path(__file__).resolve().parents[2]
-        self.base_dir = base_dir
         candidate = Path(path)
         self.path = candidate if candidate.is_absolute() else base_dir / candidate
-        self.generated_path = base_dir / "knowledge/website_faq.json"
-        self.items: list[dict] = []
-        self.reload()
-
-    def reload(self) -> None:
-        items: list[dict] = []
-        if self.path.exists():
-            items.extend(json.loads(self.path.read_text(encoding="utf-8")))
-        if self.generated_path.exists():
-            items.extend(json.loads(self.generated_path.read_text(encoding="utf-8")))
-        self.items = items
+        self.items = json.loads(self.path.read_text(encoding="utf-8")) if self.path.exists() else []
 
     def search(self, user_text: str, language: str) -> KnowledgeMatch | None:
         text = user_text.lower()

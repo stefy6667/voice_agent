@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{{ record.content.headline }}</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body class="theme-{{ record.content.theme }}">
+  <main class="public-shell" style="--accent: {{ record.content.accent_color }}; --text-color: {{ record.content.text_color }}; font-family: {{ record.content.font_family }}; text-align: {{ record.content.text_align }};">
+    <section class="story-card glass">
+      <span class="eyebrow">Experiență salvată</span>
+      <h1>{{ record.content.headline }}</h1>
+      <p>{{ record.content.body_text }}</p>
+      {% if record.content.image_path %}
+      <img class="hero-image" src="{{ record.content.image_path }}" alt="Imagine încărcată de client">
+      {% endif %}
+      {% if record.content.video_url %}
+      <div class="video-wrap">
+        <iframe src="{{ record.content.video_url }}" title="Video personalizat" allowfullscreen></iframe>
+      </div>
+      {% endif %}
+      <a class="button" href="/edit/{{ record.slug }}">{{ record.content.button_label }}</a>
+    </section>
+  </main>
+</body>
+</html>
