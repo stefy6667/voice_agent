@@ -22,5 +22,33 @@
     "language": "en",
     "question": "How long does delivery take?",
     "answer": "Orders typically arrive in 1-3 business days."
+  },
+  {
+    "id": "ai_agent_product_en",
+    "language": "en",
+    "question": "What do you sell?",
+    "answer": "We build custom AI agents and bots for businesses. They can answer leads, qualify prospects, automate support, book appointments, send SMS follow-ups, and run tailored demos for each business.",
+    "source": "ai_agent_product"
+  },
+  {
+    "id": "ai_agent_pricing_en",
+    "language": "en",
+    "question": "How much does a personalized AI agent bot cost?",
+    "answer": "A personalized AI agent bot costs 5000 dollars, and the monthly maintenance and hosting fee is 25 dollars.",
+    "source": "pricing"
+  },
+  {
+    "id": "ai_agent_demo_en",
+    "language": "en",
+    "question": "How would the demo work for my business?",
+    "answer": "The bot can generate a live scenario demo tailored to the client's business, explain how it would answer leads, handle requests, and move the customer toward the next step naturally.",
+    "source": "demo"
+  },
+  {
+    "id": "ai_agent_value_en",
+    "language": "en",
+    "question": "Why should I buy this AI agent?",
+    "answer": "The AI agent acts like a sales and support teammate: it can respond instantly, capture leads, qualify demand, book meetings, send confirmations, and stay available without sounding robotic.",
+    "source": "value"
   }
 ]

@@ -14,6 +14,8 @@ Deploy-ready FastAPI service for a customer support voice agent that:
 - **Business customization** (`BUSINESS_NAME`, `AGENT_NAME`, greetings).
 - **Skill router** (`sales`, `support`, `retention`, `scheduling`, `research`).
 - **Knowledge lookup** (`knowledge/faq.json`) for grounded answers.
+- Sample FAQ now includes both support examples and sales-oriented entries for product overview, pricing, value, and demo questions.
+- **Dynamic SMS summaries** built from recent conversation details such as reservation date, hour, and guest count when available.
 - **Research actions** for URL inspection and optional web search.
 - **Sales-oriented prompting** for discovery, value framing, and next-step closing.
 - **DB integration ready** with a default **SQLite** implementation that works out-of-the-box.
@@ -68,13 +70,14 @@ Copy `.env.example` and set values:
 - Behavior style:
   - `BEHAVIOR_STYLE_EN`, `BEHAVIOR_STYLE_RO`
 - Twilio:
-  - `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`, `TWILIO_SMS_FROM_NUMBER`, `TWILIO_VOICE_EN`, `TWILIO_VOICE_RO`, `TWILIO_DEFAULT_LANGUAGE`
+  - `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`, `TWILIO_SMS_FROM_NUMBER`, `TWILIO_VOICE_EN`, `TWILIO_VOICE_RO`, `TWILIO_RECORD_CALLS`, `TWILIO_RECORDING_STATUS_CALLBACK`, `TWILIO_DEFAULT_LANGUAGE`
+  - `TTS_PROVIDER_RO`, `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID_RO`, `ELEVENLABS_MODEL_ID`, `ELEVENLABS_OUTPUT_FORMAT`
 - Integrations:
   - `DATABASE_URL`, `CRM_API_BASE_URL`, `CRM_API_KEY`
 - Google Calendar / Meet:
   - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, `GOOGLE_CALENDAR_ID`, `GOOGLE_CALENDAR_TIMEZONE`
 - Web research:
-  - `TAVILY_API_KEY`, `TAVILY_BASE_URL`, `WEB_SEARCH_MAX_RESULTS`
+  - `TAVILY_API_KEY`, `TAVILY_BASE_URL`, `WEB_SEARCH_MAX_RESULTS`, `WEBSITE_CONTEXT_URL`, `WEBSITE_CONTEXT_MODE`
 - Operations:
   - `HUMAN_HANDOFF_NUMBER`, `ADMIN_ALERT_EMAIL`
 
@@ -84,12 +87,19 @@ Copy `.env.example` and set values:
 
 ```env
 TWILIO_VOICE_EN=Polly.Amy-Neural
-TWILIO_VOICE_RO=Google.ro-RO-Standard-A
+TWILIO_VOICE_RO=Google.ro-RO-Wavenet-B
 TWILIO_DEFAULT_LANGUAGE=ro-RO
+TTS_PROVIDER_RO=elevenlabs
+ELEVENLABS_API_KEY=
+ELEVENLABS_VOICE_ID_RO=EXAVITQu4vr4xnSDxMaL
+ELEVENLABS_MODEL_ID=eleven_multilingual_v2
+ELEVENLABS_OUTPUT_FORMAT=mp3_44100_128
 BEHAVIOR_STYLE_EN=Warm, friendly, concise, and natural. Use short sentences and empathy.
 BEHAVIOR_STYLE_RO=Cald, prietenos, concis și natural. Folosește propoziții scurte și empatie.
 GREETING_RO=Bună! Sunt Ana de la Compania X. Cu ce te pot ajuta astăzi?
 ```
+
+When `TTS_PROVIDER_RO=elevenlabs` and `ELEVENLABS_API_KEY` is configured, Romanian Twilio responses are rendered as generated audio clips served from this app and played back to callers via Twilio `<Play>`. If ElevenLabs is not configured, the app falls back to Twilio `<Say>`.
 
 ---
 
@@ -97,12 +107,16 @@ GREETING_RO=Bună! Sunt Ana de la Compania X. Cu ce te pot ajuta astăzi?
 
 - `GET /health`
 - `GET /api/skills`
+- `GET /api/transcript/{session_id}`
 - `POST /api/simulate-turn`
 - `POST /api/actions/send-sms`
 - `POST /api/actions/schedule-call`
 - `POST /api/actions/research`
+- `POST /api/actions/import-website-faq`
 - `POST /twilio/voice`
 - `POST /twilio/outbound`
+- `POST /twilio/recording-status`
+- `GET /api/tts/{token}`
 
 ### Example simulate turn
 
@@ -155,6 +169,10 @@ curl -X POST http://localhost:8000/api/actions/research \
 If Google credentials are missing, the scheduling endpoint returns a **dry-run** payload with a demo Meet link so you can test the integration flow before wiring production secrets.
 If `TAVILY_API_KEY` is missing, search requests return a **dry-run** response, but direct URL inspection still works.
 
+Direct URL inspection accepts only public `http`/`https` targets and blocks `localhost` or private-network addresses to avoid accidental internal fetches.
+If `WEBSITE_CONTEXT_URL` is configured, the agent can fetch that page automatically when the user asks for product/menu/site details and there is no strong FAQ match.
+Use `WEBSITE_CONTEXT_MODE=faq_only` to rely only on the FAQ file, `WEBSITE_CONTEXT_MODE=on_demand` to read the website only when needed, or `WEBSITE_CONTEXT_MODE=always` to prefer website context whenever the FAQ has no strong match.
+
 ---
 
 ## 5) Twilio setup
@@ -164,6 +182,7 @@ If `TAVILY_API_KEY` is missing, search requests return a **dry-run** response, b
 3. Set method `POST`.
 4. Fill Twilio credentials in `.env` for outbound calls.
 5. Fill `TWILIO_SMS_FROM_NUMBER` if you want SMS actions.
+6. For Romanian ElevenLabs playback, set `PUBLIC_BASE_URL` to your public HTTPS hostname and configure `ELEVENLABS_API_KEY`.
 
 ---
 
@@ -254,8 +273,10 @@ If the bot repeats the intro or doesn’t seem Romanian-first:
 
 1. Set `INTRO_ONLY_MODE=false`.
 2. Set `TWILIO_DEFAULT_LANGUAGE=ro-RO`.
-3. Set `TWILIO_VOICE_RO=Google.ro-RO-Standard-A`.
-4. Make sure `OPENAI_API_KEY` is set if you want AI-generated answers.
+3. Set `TTS_PROVIDER_RO=elevenlabs` and configure `ELEVENLABS_API_KEY`.
+4. Optionally keep `TWILIO_VOICE_RO=Google.ro-RO-Wavenet-B` as the fallback voice.
+5. Make sure `PUBLIC_BASE_URL` points to your public HTTPS app URL.
+6. Make sure `OPENAI_API_KEY` is set if you want AI-generated answers.
 
 ---
 
