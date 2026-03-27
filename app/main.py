@@ -1,243 +1,302 @@
-import base64
-import html
-import imghdr
-from pathlib import Path
-from urllib.parse import quote
+from html import escape
+import re
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI, Form
+from fastapi.responses import PlainTextResponse
 
 from app.config import settings
-from app.models import QRCreateResponse
-from app.services.qr_store import QRStore
+from app.models import (
+    ResearchRequest,
+    ScheduleMeetingRequest,
+    SimulateTurnRequest,
+    SimulateTurnResponse,
+    SmsRequest,
+    TwilioOutboundRequest,
+)
+from app.services.agent_skills import SkillRegistry
+from app.services.calendar import CalendarClient
+from app.services.integrations import build_integration_clients
+from app.services.knowledge_base import KnowledgeBase, KnowledgeMatch
+from app.services.language import LanguageDetector
+from app.services.orchestrator import OpenAILLMProvider
+from app.services.research import ResearchClient
+from app.services.session_store import SessionStore
+from app.services.telephony import TelephonyService
+from app.services.tools import ToolClient
 
-app = FastAPI(title="QR Studio")
-store = QRStore()
-app.mount("/static", StaticFiles(directory=str(Path(__file__).resolve().parent / "static")), name="static")
-app.mount("/uploads", StaticFiles(directory=str(settings.storage_path)), name="uploads")
+app = FastAPI(title="Bilingual Voice Agent")
+
+language_detector = LanguageDetector()
+skill_registry = SkillRegistry()
+kb = KnowledgeBase()
+llm = OpenAILLMProvider()
+sessions = SessionStore()
+db_client, crm_client = build_integration_clients()
+telephony = TelephonyService()
+calendar = CalendarClient()
+research = ResearchClient()
+tools = ToolClient(db_client, crm_client, telephony, calendar, research)
 
 
-def ensure_admin(code: str) -> None:
-    if code != settings.admin_access_code:
-        raise HTTPException(status_code=403, detail="Cod admin invalid.")
+def build_intro(language: str) -> str:
+    template = settings.greeting_ro if language == "ro" else settings.greeting_en
+    return template.format(agent_name=settings.agent_name, business_name=settings.business_name)
 
 
-def build_public_url(slug: str) -> str:
-    return f"{settings.public_base_url.rstrip('/')}/p/{slug}"
+def twilio_voice_for_language(language: str) -> str:
+    return settings.twilio_voice_ro if language == "ro" else settings.twilio_voice_en
 
 
-def external_qr_url(slug: str) -> str:
-    return f"https://api.qrserver.com/v1/create-qr-code/?size=800x800&data={quote(build_public_url(slug), safe='')}"
+def xml_safe(text: str) -> str:
+    return escape(text, quote=False)
 
 
-def shell(title: str, body: str, body_class: str = "") -> HTMLResponse:
-    return HTMLResponse(
-        f"""<!doctype html><html lang='ro'><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{html.escape(title)}</title><link rel='stylesheet' href='/static/styles.css'></head><body class='{body_class}'>{body}</body></html>"""
+def gather_loop(language_code: str) -> str:
+    return (
+        f'<Gather input="speech" language="{language_code}" action="/twilio/voice" method="POST" timeout="5" speechTimeout="auto" />'
+        '<Pause length="1"/>'
+        '<Redirect method="POST">/twilio/voice</Redirect>'
     )
 
 
-def render_index() -> HTMLResponse:
-    cards = []
-    for item in store.list_all():
-        cards.append(
-            f"""
-            <article class='card'>
-              <img src='{external_qr_url(item.slug)}' alt='QR {item.slug}'>
-              <div>
-                <h3>{html.escape(item.content.headline)}</h3>
-                <p><strong>Slug:</strong> {item.slug}</p>
-                <p><strong>Cod editare:</strong> {item.edit_code}</p>
-                <p><strong>Public:</strong> <a href='/p/{item.slug}'>/p/{item.slug}</a></p>
-                <p><strong>Editor:</strong> <a href='/edit/{item.slug}'>/edit/{item.slug}</a></p>
-                <a class='button secondary' href='/api/qr/{item.slug}.png'>Download PNG</a>
-              </div>
-            </article>
-            """
+def intro_only_response(language: str, session_id: str) -> SimulateTurnResponse:
+    intro = build_intro(language)
+    sessions.upsert_language(session_id, language)
+    return SimulateTurnResponse(
+        session_id=session_id,
+        language=language,
+        answer=intro,
+        source="intro_only",
+        skill=None,
+    )
+
+
+def needs_handoff(user_text: str, kb_match: KnowledgeMatch | None, history: list[dict[str, str]]) -> bool:
+    lower_text = user_text.lower()
+    urgent_markers = [
+        "lawyer", "legal", "gdpr", "security", "fraud", "complaint", "supervisor", "manager",
+        "human", "operator", "chargeback", "refund",
+    ]
+    repeated_failures = sum(
+        1 for turn in history[-4:] if turn["role"] == "assistant" and "detail" in turn["text"].lower()
+    ) >= 2
+    return any(marker in lower_text for marker in urgent_markers) or (kb_match is None and repeated_failures)
+
+
+def extract_url(text: str) -> str | None:
+    match = re.search(r"https?://\S+", text)
+    return match.group(0) if match else None
+
+
+def wants_web_research(text: str) -> bool:
+    lowered = text.lower()
+    markers = ["search", "internet", "online", "verify", "check this", "cauta", "caută", "verifica", "verifică", "site", "link"]
+    return any(marker in lowered for marker in markers) or bool(extract_url(text))
+
+
+def extract_phone_number(text: str) -> str | None:
+    match = re.search(r"(\+?\d[\d\s\-]{7,}\d)", text)
+    if not match:
+        return None
+    return re.sub(r"[\s\-]", "", match.group(1))
+
+
+def wants_outbound_call(text: str) -> bool:
+    lowered = text.lower()
+    markers = ["call me", "call me back", "callback", "sună-mă", "suna-ma", "sunati-ma", "sunăți-mă", "apelati-ma", "apelează-mă", "demo call"]
+    return any(marker in lowered for marker in markers)
+
+
+def build_outbound_message(language: str, skill_name: str | None) -> str:
+    if language == "ro":
+        if skill_name == "sales":
+            return "Revin cu un apel scurt pentru a-ți prezenta oferta potrivită și următorii pași."
+        return "Revin cu un apel scurt pentru a continua discuția și a te ajuta mai departe."
+    if skill_name == "sales":
+        return "I’m calling back with the best-fit offer and the next steps."
+    return "I’m calling back shortly so we can continue the conversation."
+
+
+def build_outbound_confirmation(language: str, phone_number: str, status: str) -> str:
+    if language == "ro":
+        if status == "dry_run":
+            return f"Perfect, am pregătit un apel de revenire către {phone_number}. După ce activezi credențialele Twilio, apelul va porni automat."
+        return f"Perfect, am programat un apel de revenire către {phone_number}. Vei fi contactat în scurt timp."
+    if status == "dry_run":
+        return f"Perfect, I prepared a callback to {phone_number}. Once Twilio credentials are enabled, the outbound call will run automatically."
+    return f"Perfect, I scheduled a callback to {phone_number}. You should receive the call shortly."
+
+
+def should_use_kb_match(user_text: str, kb_match: KnowledgeMatch | None) -> bool:
+    if kb_match is None:
+        return False
+    lowered = user_text.lower()
+    request_markers = [
+        "?", "cum", "când", "cand", "unde", "ce", "vreau", "aș vrea", "as vrea", "poți", "poti",
+        "help", "how", "when", "where", "can you", "i need", "i want", "please",
+    ]
+    if kb_match.confidence >= 0.75:
+        return True
+    return any(marker in lowered for marker in request_markers)
+
+
+async def build_turn_response(session_id: str, user_text: str) -> SimulateTurnResponse:
+    previous_language = sessions.get_language(session_id)
+    detection = language_detector.detect(user_text, previous_language=previous_language)
+    sessions.upsert_language(session_id, detection.language)
+    sessions.append_turn(session_id, "user", user_text)
+
+    if settings.intro_only_mode:
+        result = intro_only_response(detection.language, session_id)
+        sessions.append_turn(session_id, "assistant", result.answer)
+        return result
+
+    context = await tools.get_customer_context(session_id)
+    actions: list[dict] = []
+    if wants_web_research(user_text):
+        url = extract_url(user_text)
+        research_result = await (tools.inspect_url(url) if url else tools.search_web(user_text))
+        context["research"] = research_result
+        actions.append(research_result)
+
+    raw_kb_match = kb.search(user_text, detection.language)
+    kb_match = raw_kb_match if should_use_kb_match(user_text, raw_kb_match) else None
+    active_skill = skill_registry.resolve(detection.language, user_text)
+    skill_instruction = active_skill.prompt_instruction(detection.language) if active_skill else None
+    history = sessions.get_recent_turns(session_id)
+    handoff = needs_handoff(user_text, kb_match, history)
+
+    phone_number = extract_phone_number(user_text)
+    outbound_action = None
+    if phone_number and wants_outbound_call(user_text):
+        outbound_action = await telephony.create_outbound_call(
+            phone_number,
+            build_outbound_message(detection.language, active_skill.name if active_skill else None),
+            detection.language,
         )
-    body = f"""
-    <main class='shell'>
-      <section class='hero glass'>
-        <div>
-          <span class='eyebrow'>Render-ready QR experience studio</span>
-          <h1>Generezi QR-uri, clientul personalizează conținutul oricând.</h1>
-          <p>Fluxul este exact cum ai cerut: tu creezi codul, îl descarci PNG, clientul scanează, configurează, salvează, iar la scanările următoare vede conținutul salvat. Cu butonul de editare și codul unic poate relua procesul oricând.</p>
-        </div>
-        <form class='admin-card' method='post' action='/api/admin/create'>
-          <label>Codul tău de admin</label>
-          <input type='password' name='admin_code' placeholder='ADMIN_ACCESS_CODE' required>
-          <button type='submit'>Generează QR nou</button>
-          <small>Setează ADMIN_ACCESS_CODE în Render înainte de producție.</small>
-        </form>
-      </section>
-      <section class='dashboard glass'>
-        <div class='section-header'>
-          <h2>Codurile tale generate</h2>
-          <p>Doar cine are codul tău de admin poate crea noi QR-uri. Fiecare cod are un token unic de editare pentru client.</p>
-        </div>
-        <div class='cards'>{''.join(cards) if cards else "<div class='empty'>Nu ai generat încă niciun QR.</div>"}</div>
-      </section>
-    </main>
-    """
-    return shell("QR Studio", body)
+        actions.append(outbound_action)
 
+    if handoff:
+        answer = (
+            "Te conectez cu un coleg uman care poate verifica în siguranță acest caz."
+            if detection.language == "ro"
+            else "I’m routing you to a human teammate who can review this safely."
+        )
+        source = "handoff"
+        citations: list[str] = []
+    else:
+        if outbound_action is not None:
+            answer = build_outbound_confirmation(detection.language, phone_number, outbound_action.get("status", "queued"))
+        else:
+            answer = await llm.generate(
+                user_text,
+                detection.language,
+                kb_match,
+                context,
+                skill_instruction,
+                history,
+            )
+        source = "knowledge_base" if kb_match else ("action" if outbound_action else ("research" if actions else "llm"))
+        citations = [kb_match.source] if kb_match else []
 
-def render_public(record) -> HTMLResponse:
-    image = f"<img class='hero-image' src='{record.content.image_path}' alt='Imagine încărcată de client'>" if record.content.image_path else ""
-    video = f"<div class='video-wrap'><iframe src='{html.escape(record.content.video_url)}' title='Video personalizat' allowfullscreen></iframe></div>" if record.content.video_url else ""
-    body = f"""
-    <main class='public-shell' style='--accent:{record.content.accent_color}; --text-color:{record.content.text_color}; font-family:{html.escape(record.content.font_family)}; text-align:{record.content.text_align};'>
-      <section class='story-card glass'>
-        <span class='eyebrow'>Experiență salvată</span>
-        <h1>{html.escape(record.content.headline)}</h1>
-        <p>{html.escape(record.content.body_text)}</p>
-        {image}
-        {video}
-        <a class='button' href='/edit/{record.slug}'>{html.escape(record.content.button_label)}</a>
-      </section>
-    </main>
-    """
-    return shell(record.content.headline, body, f"theme-{record.content.theme}")
-
-
-def render_edit(record, unlocked: bool, code: str = "") -> HTMLResponse:
-    unlock_block = f"""
-      <form method='post' action='/unlock/{record.slug}' class='unlock-form'>
-        <label>Cod alfanumeric de editare</label>
-        <input type='text' name='code' placeholder='ex: {record.edit_code}' required>
-        <button type='submit'>Deblochează editorul</button>
-      </form>
-    """ if not unlocked else f"""
-      <form class='editor-form' method='post' action='/api/qr/{record.slug}/content' enctype='multipart/form-data'>
-        <input type='hidden' name='edit_code' value='{html.escape(code)}'>
-        <label>Titlu</label><input type='text' name='headline' value='{html.escape(record.content.headline)}' required>
-        <label>Text</label><textarea name='body_text' rows='5' required>{html.escape(record.content.body_text)}</textarea>
-        <label>Text buton</label><input type='text' name='button_label' value='{html.escape(record.content.button_label)}' required>
-        <div class='grid-two'>
-          <div><label>Temă</label><select name='theme'>{''.join([f"<option value='{t}' {'selected' if record.content.theme==t else ''}>{t}</option>" for t in ['aurora','midnight','sunset']])}</select></div>
-          <div><label>Font</label><select name='font_family'>{''.join([f"<option value='{f}' {'selected' if record.content.font_family==f else ''}>{f}</option>" for f in ['Inter','Georgia','Verdana']])}</select></div>
-        </div>
-        <div class='grid-two'>
-          <div><label>Aliniere text</label><select name='text_align'>{''.join([f"<option value='{a}' {'selected' if record.content.text_align==a else ''}>{a}</option>" for a in ['left','center']])}</select></div>
-          <div><label>Link video embed</label><input type='url' name='video_url' value='{html.escape(record.content.video_url or '')}'></div>
-        </div>
-        <div class='grid-two'>
-          <div><label>Culoare accent</label><input type='color' name='accent_color' value='{record.content.accent_color}'></div>
-          <div><label>Culoare text</label><input type='color' name='text_color' value='{record.content.text_color}'></div>
-        </div>
-        <label>Poza clientului</label><input type='file' name='image' accept='image/*'>
-        <button type='submit'>Salvează experiența</button>
-      </form>
-    """
-    preview_img = f"<img class='hero-image' src='{record.content.image_path}' alt='preview'>" if record.content.image_path else ""
-    body = f"""
-    <main class='editor-layout'>
-      <section class='glass editor-panel'>
-        <h1>Personalizează codul QR</h1>
-        <p>Clientul introduce codul alfanumeric primit, apoi poate modifica textul, culorile, fontul, poza și video-ul de câte ori dorește.</p>
-        {unlock_block}
-      </section>
-      <section class='glass preview-panel'>
-        <span class='eyebrow'>Preview</span>
-        <h2>{html.escape(record.content.headline)}</h2>
-        <p>{html.escape(record.content.body_text)}</p>
-        {preview_img}
-        <a class='button' href='/p/{record.slug}'>Vezi pagina publică</a>
-      </section>
-    </main>
-    """
-    return shell(f"Editează {record.slug}", body, f"theme-{record.content.theme}")
-
-
-def file_to_data_url(raw: bytes, content_type: str | None) -> str:
-    mime = content_type or "application/octet-stream"
-    return f"data:{mime};base64,{base64.b64encode(raw).decode('ascii')}"
-
-
-@app.get("/", response_class=HTMLResponse)
-async def home() -> HTMLResponse:
-    return render_index()
+    sessions.append_turn(session_id, "assistant", answer)
+    return SimulateTurnResponse(
+        session_id=session_id,
+        language=detection.language,
+        answer=answer,
+        source=source,
+        skill=active_skill.name if active_skill else None,
+        handoff_recommended=handoff,
+        citations=citations,
+        actions=actions,
+    )
 
 
 @app.get("/health")
 async def health() -> dict:
-    return {"ok": True, "app": settings.app_name, "items": len(store.list_all())}
-
-
-@app.post("/api/admin/create", response_model=QRCreateResponse)
-async def create_qr(admin_code: str = Form(...)) -> QRCreateResponse:
-    ensure_admin(admin_code)
-    record = store.create()
-    return QRCreateResponse(qr_id=record.qr_id, edit_code=record.edit_code, slug=record.slug, qr_png_url=f"/api/qr/{record.slug}.png", public_url=build_public_url(record.slug))
-
-
-@app.get("/api/qr/{slug}.png")
-async def qr_png(slug: str) -> RedirectResponse:
-    if store.get_by_slug(slug) is None:
-        raise HTTPException(status_code=404, detail="QR inexistent")
-    return RedirectResponse(url=external_qr_url(slug), status_code=307)
-
-
-@app.get("/p/{slug}", response_class=HTMLResponse)
-async def public_page(slug: str) -> HTMLResponse:
-    record = store.get_by_slug(slug)
-    if record is None:
-        raise HTTPException(status_code=404, detail="Pagina nu există.")
-    return render_public(record)
-
-
-@app.get("/edit/{slug}", response_class=HTMLResponse)
-async def edit_page(slug: str, code: str | None = None) -> HTMLResponse:
-    record = store.get_by_slug(slug)
-    if record is None:
-        raise HTTPException(status_code=404, detail="Cod inexistent.")
-    return render_edit(record, code == record.edit_code if code else False, code or "")
-
-
-@app.post("/api/qr/{slug}/content")
-async def update_qr_content(
-    slug: str,
-    edit_code: str = Form(...),
-    headline: str = Form(...),
-    body_text: str = Form(...),
-    button_label: str = Form(...),
-    theme: str = Form(...),
-    font_family: str = Form(...),
-    text_align: str = Form(...),
-    accent_color: str = Form(...),
-    text_color: str = Form(...),
-    video_url: str = Form(""),
-    image: UploadFile | None = File(default=None),
-) -> JSONResponse:
-    payload = {
-        "headline": headline,
-        "body_text": body_text,
-        "button_label": button_label,
-        "theme": theme,
-        "font_family": font_family,
-        "text_align": text_align,
-        "accent_color": accent_color,
-        "text_color": text_color,
-        "video_url": video_url or None,
+    return {
+        "ok": True,
+        "app": settings.app_name,
+        "environment": settings.environment,
+        "business": settings.business_name,
+        "skills": len(skill_registry.list_skills()),
+        "intro_only_mode": settings.intro_only_mode,
+        "google_calendar_configured": calendar.configured(),
+        "twilio_sms_configured": bool(settings.twilio_account_sid and settings.twilio_auth_token and (settings.twilio_sms_from_number or settings.twilio_from_number)),
+        "web_search_configured": research.configured(),
     }
-    if image is not None and image.filename:
-        raw = await image.read()
-        if len(raw) > settings.max_upload_size_mb * 1024 * 1024:
-            raise HTTPException(status_code=400, detail="Fișierul este prea mare.")
-        if imghdr.what(None, raw) not in {"png", "jpeg", "gif", "webp"}:
-            raise HTTPException(status_code=400, detail="Imagine invalidă.")
-        payload["image_path"] = file_to_data_url(raw, image.content_type)
-    record = store.update(slug, edit_code, payload)
-    if record is None:
-        raise HTTPException(status_code=403, detail="Codul de editare este invalid.")
-    return JSONResponse({"ok": True, "slug": slug, "updated_at": record.updated_at})
 
 
-@app.post("/unlock/{slug}")
-async def unlock(slug: str, code: str = Form(...)) -> RedirectResponse:
-    record = store.get_by_slug(slug)
-    if record is None:
-        raise HTTPException(status_code=404, detail="Cod inexistent.")
-    if code != record.edit_code:
-        raise HTTPException(status_code=403, detail="Cod de editare invalid.")
-    return RedirectResponse(url=f"/edit/{slug}?code={code}", status_code=303)
+@app.get("/api/skills")
+async def list_skills() -> dict:
+    return {"skills": skill_registry.list_skills()}
+
+
+@app.post("/api/simulate-turn", response_model=SimulateTurnResponse)
+async def simulate_turn(payload: SimulateTurnRequest) -> SimulateTurnResponse:
+    return await build_turn_response(payload.session_id, payload.user_text)
+
+
+@app.post("/api/actions/send-sms")
+async def send_sms(payload: SmsRequest) -> dict:
+    return await tools.send_sms(payload.to_number, payload.message)
+
+
+@app.post("/api/actions/schedule-call")
+async def schedule_call(payload: ScheduleMeetingRequest) -> dict:
+    result = await tools.schedule_meeting(
+        attendee_email=payload.attendee_email,
+        start_iso=payload.start_iso,
+        end_iso=payload.end_iso,
+        summary=payload.summary,
+        description=payload.description,
+    )
+    sessions.append_turn(
+        payload.session_id,
+        "system",
+        f"Scheduled meeting for {payload.attendee_email} at {payload.start_iso} with status {result.get('status')}",
+    )
+    return result
+
+
+@app.post("/api/actions/research")
+async def research_action(payload: ResearchRequest) -> dict:
+    if payload.url:
+        return await tools.inspect_url(payload.url)
+    if payload.query:
+        return await tools.search_web(payload.query)
+    return {"status": "error", "message": "Provide either query or url."}
+
+
+@app.post("/twilio/voice", response_class=PlainTextResponse)
+async def twilio_voice(
+    CallSid: str = Form(default=""),
+    SpeechResult: str = Form(default=""),
+) -> str:
+    session_id = CallSid or "unknown-call"
+
+    if not SpeechResult:
+        lang_code = settings.twilio_default_language
+        lang = "ro" if lang_code.startswith("ro") else "en"
+        intro = build_intro(lang)
+        return (
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            f'<Response><Say voice="{twilio_voice_for_language(lang)}" language="{lang_code}">{xml_safe(intro)}</Say>'
+            f"{gather_loop(lang_code)}"
+            "</Response>"
+        )
+
+    result = await build_turn_response(session_id, SpeechResult)
+    lang_code = "ro-RO" if result.language == "ro" else "en-US"
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        f'<Response><Say voice="{twilio_voice_for_language(result.language)}" language="{lang_code}">'
+        f"{xml_safe(result.answer)}</Say>"
+        f"{gather_loop(lang_code)}"
+        "</Response>"
+    )
+
+
+@app.post("/twilio/outbound")
+async def outbound_call(payload: TwilioOutboundRequest) -> dict:
+    return await telephony.create_outbound_call(payload.to_number, payload.message, payload.language)
