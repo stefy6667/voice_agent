@@ -3,7 +3,8 @@ import re
 from fastapi import FastAPI, Form, HTTPException
 from fastapi.responses import PlainTextResponse, Response
 import json
-
+from app.services.business_loader import init_business
+_business_config = init_business(reload_kb=False)
 from app.config import settings
 from app.models import (
     ResearchRequest,
