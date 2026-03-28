@@ -1,54 +1,170 @@
 [
   {
-    "id": "billing_invoice",
+    "id": "what_we_do_ro",
     "language": "ro",
-    "question": "Cum pot primi factura?",
-    "answer": "Poți primi factura pe email în maximum 24 de ore după confirmarea plății."
-  },
-  {
-    "id": "billing_invoice_en",
-    "language": "en",
-    "question": "How can I get my invoice?",
-    "answer": "You can receive your invoice by email within 24 hours after payment confirmation."
-  },
-  {
-    "id": "delivery_time_ro",
-    "language": "ro",
-    "question": "In cat timp ajunge comanda?",
-    "answer": "Comenzile ajung de obicei în 1-3 zile lucrătoare."
-  },
-  {
-    "id": "delivery_time_en",
-    "language": "en",
-    "question": "How long does delivery take?",
-    "answer": "Orders typically arrive in 1-3 business days."
-  },
-  {
-    "id": "ai_agent_product_en",
-    "language": "en",
-    "question": "What do you sell?",
-    "answer": "We build custom AI agents and bots for businesses. They can answer leads, qualify prospects, automate support, book appointments, send SMS follow-ups, and run tailored demos for each business.",
+    "question": "Ce faceti? / Ce servicii oferiti? / Cu ce va ocupati? / Ce vindeti?",
+    "answer": "Ajutam companiile sa nu mai piarda lead-uri si timp cu apeluri repetitive. Practic construim un agent vocal AI care vorbeste cu clientii tai — raspunde la intrebari, califica lead-urile, programeaza intalniri si trimite SMS-uri automat. Tu si echipa ta va puteti concentra pe ce conteaza cu adevarat.",
     "source": "ai_agent_product"
   },
   {
-    "id": "ai_agent_pricing_en",
+    "id": "what_we_do_en",
     "language": "en",
-    "question": "How much does a personalized AI agent bot cost?",
-    "answer": "A personalized AI agent bot costs 5000 dollars, and the monthly maintenance and hosting fee is 25 dollars.",
+    "question": "What do you do? / What services do you offer? / What do you sell?",
+    "answer": "We help businesses stop losing leads and time on repetitive calls. We build an AI voice agent that talks to your customers — answers questions, qualifies leads, books appointments, and sends SMS follow-ups automatically. You and your team can focus on what actually matters.",
+    "source": "ai_agent_product"
+  },
+  {
+    "id": "how_it_works_ro",
+    "language": "ro",
+    "question": "Cum functioneaza? / Cum merge agentul? / Explica-mi",
+    "answer": "Agentul preia apelurile in locul tau, vorbeste natural cu clientul, intelege ce vrea, raspunde la intrebari si il ghideaza spre urmatorul pas — o programare, un email de confirmare sau un transfer la tine. Totul se intampla automat, non-stop, fara sa fie nevoie de cineva la telefon.",
+    "source": "how_it_works"
+  },
+  {
+    "id": "how_it_works_en",
+    "language": "en",
+    "question": "How does it work? / How does the agent work? / Explain it to me",
+    "answer": "The agent handles calls on your behalf, talks naturally with the customer, understands what they need, answers questions, and guides them to the next step — a booking, a confirmation email, or a transfer to you. Everything happens automatically, around the clock, without anyone needing to be on the phone.",
+    "source": "how_it_works"
+  },
+  {
+    "id": "benefits_ro",
+    "language": "ro",
+    "question": "Ce beneficii are? / La ce ma ajuta? / De ce as vrea asta?",
+    "answer": "Companiile care folosesc agenti AI vad de obicei trei lucruri: mai putine lead-uri pierdute pentru ca agentul raspunde si noaptea si in weekend, echipa mai putin stresata de apeluri repetitive, si clienti mai multumiti pentru ca primesc raspuns instant. In plus, costul e fix — nu depinde de volumul de apeluri.",
+    "source": "benefits"
+  },
+  {
+    "id": "benefits_en",
+    "language": "en",
+    "question": "What are the benefits? / How does it help me? / Why would I want this?",
+    "answer": "Companies using AI agents typically see three things: fewer lost leads because the agent answers at night and on weekends too, a less stressed team no longer tied to repetitive calls, and happier customers who get instant responses. Plus, the cost is fixed — it doesn't depend on call volume.",
+    "source": "benefits"
+  },
+  {
+    "id": "financial_benefits_ro",
+    "language": "ro",
+    "question": "Ce beneficii financiare are? / Economisesc bani? / Merita financiar?",
+    "answer": "Depinde de situatia ta, dar gandeste-te asa: un om de vanzari costa intre 2000 si 5000 EUR pe luna, lucreaza 8 ore pe zi si nu poate gestiona zece apeluri simultan. Un agent AI lucreaza non-stop, gestioneaza volume mari si costul e predictibil. Multi clienti ai nostri si-au recuperat investitia in prima sau a doua luna.",
+    "source": "financial_benefits"
+  },
+  {
+    "id": "financial_benefits_en",
+    "language": "en",
+    "question": "What are the financial benefits? / Does it save money? / Is it worth it financially?",
+    "answer": "It depends on your situation, but think of it this way: a sales rep costs between 2000 and 5000 EUR per month, works 8 hours a day, and can't handle ten calls at once. An AI agent works around the clock, handles large volumes, and the cost is predictable. Many of our clients recovered their investment in the first or second month.",
+    "source": "financial_benefits"
+  },
+  {
+    "id": "pricing_ro",
+    "language": "ro",
+    "question": "Cat costa? / Care e pretul? / Cat platesc?",
+    "answer": "Setup-ul este 5000 EUR si include configurarea completa pentru businessul tau — agentul invatat cu produsele, tonul si procesele tale. Dupa aceea e 25 EUR pe luna pentru mentenanta si hosting. Dar inainte sa vorbim de pret, spune-mi putin despre situatia ta — sa vedem daca e potrivit pentru tine.",
     "source": "pricing"
   },
   {
-    "id": "ai_agent_demo_en",
+    "id": "pricing_en",
     "language": "en",
-    "question": "How would the demo work for my business?",
-    "answer": "The bot can generate a live scenario demo tailored to the client's business, explain how it would answer leads, handle requests, and move the customer toward the next step naturally.",
+    "question": "How much does it cost? / What is the price? / How much do I pay?",
+    "answer": "Setup is 5000 EUR and includes full configuration for your business — the agent trained with your products, tone, and processes. After that it's 25 EUR per month for maintenance and hosting. But before we talk price, tell me a bit about your situation — let's see if it's the right fit for you.",
+    "source": "pricing"
+  },
+  {
+    "id": "demo_ro",
+    "language": "ro",
+    "question": "Pot vedea un demo? / Arata-mi cum merge / Cum ar functiona pentru mine?",
+    "answer": "Esti deja in mijlocul unui demo live chiar acum. Agentul cu care vorbesti este exact ce am construi pentru tine, personalizat cu numele companiei tale, produsele si stilul tau de comunicare. Ce domeniu are compania ta? Asa iti pot arata concret cum ar suna pentru clientii tai.",
     "source": "demo"
   },
   {
-    "id": "ai_agent_value_en",
+    "id": "demo_en",
     "language": "en",
-    "question": "Why should I buy this AI agent?",
-    "answer": "The AI agent acts like a sales and support teammate: it can respond instantly, capture leads, qualify demand, book meetings, send confirmations, and stay available without sounding robotic.",
-    "source": "value"
+    "question": "Can I see a demo? / Show me how it works / How would it work for me?",
+    "answer": "You're already in a live demo right now. The agent you're talking to is exactly what we would build for you, customized with your company name, products, and communication style. What industry is your business in? That way I can show you concretely how it would sound for your customers.",
+    "source": "demo"
+  },
+  {
+    "id": "implementation_ro",
+    "language": "ro",
+    "question": "Cat dureaza? / Cand e gata? / Cat timp ia implementarea?",
+    "answer": "De obicei intre 3 si 5 zile lucratoare. Iti trimitem un brief scurt, il completezi in vreo 10 minute cu informatii despre businessul tau, iar noi configuram, testam si integram totul. Tu nu trebuie sa faci nimic tehnic.",
+    "source": "implementation"
+  },
+  {
+    "id": "implementation_en",
+    "language": "en",
+    "question": "How long does it take? / When will it be ready? / How long is the implementation?",
+    "answer": "Usually between 3 and 5 business days. We send you a short brief, you fill it in within about 10 minutes with information about your business, and we configure, test, and integrate everything. You don't need to do anything technical.",
+    "source": "implementation"
+  },
+  {
+    "id": "objection_expensive_ro",
+    "language": "ro",
+    "question": "E prea scump / Nu am buget / E mult de tot",
+    "answer": "Inteleg, e o suma de luat in seama. Curiozitate — cat te costa acum sa gestionezi apelurile si lead-urile? Fie ca e vorba de timp al tau, al echipei sau de lead-uri pierdute care nu au primit raspuns la timp. Uneori costul invizibil e mai mare decat pare.",
+    "source": "objection_price"
+  },
+  {
+    "id": "objection_expensive_en",
+    "language": "en",
+    "question": "It is too expensive / I don't have budget / That is a lot",
+    "answer": "I get it, it's a real number to consider. Out of curiosity — what does it cost you right now to manage calls and leads? Whether that's your time, your team's time, or leads lost because they didn't get a timely response. Sometimes the invisible cost is bigger than it seems.",
+    "source": "objection_price"
+  },
+  {
+    "id": "objection_think_ro",
+    "language": "ro",
+    "question": "Ma gandesc / Am nevoie de timp / Revin eu / Nu stiu inca",
+    "answer": "Absolut normal, nu e o decizie de luat in graba. Ce anume te face sa eziti? Daca e ceva concret — legat de pret, de cum functioneaza sau de potrivire pentru businessul tau — hai sa discutam acum si poate clarificam lucrurile.",
+    "source": "objection_think"
+  },
+  {
+    "id": "objection_think_en",
+    "language": "en",
+    "question": "I need to think / I will get back to you / Not sure yet / Let me think",
+    "answer": "Completely understandable, it's not a decision to rush. What's making you hesitate? If it's something specific — about the price, how it works, or whether it fits your business — let's talk it through now and maybe we can clear things up.",
+    "source": "objection_think"
+  },
+  {
+    "id": "objection_existing_ro",
+    "language": "ro",
+    "question": "Am deja oameni / Folosim altceva / Nu cred ca am nevoie",
+    "answer": "Are sens. Multi dintre clientii nostri aveau deja echipa sau alte solutii — agentul nu vine sa inlocuiasca oamenii, ci sa preia ce e repetitiv si consumator de timp. Apelurile de calificare, intrebarile standard, urmaririlede dupa ore. Oamenii tai raman pentru ce necesita cu adevarat judecata umana.",
+    "source": "objection_existing"
+  },
+  {
+    "id": "objection_existing_en",
+    "language": "en",
+    "question": "We already have people / We use something else / I don't think I need it",
+    "answer": "That makes sense. Many of our clients already had a team or other solutions — the agent doesn't come to replace people, but to take over what's repetitive and time-consuming. Qualification calls, standard questions, after-hours follow-ups. Your people stay focused on what truly requires human judgment.",
+    "source": "objection_existing"
+  },
+  {
+    "id": "next_step_ro",
+    "language": "ro",
+    "question": "Cum incepem? / Vreau sa incerc / Ce urmeaza? / Sunt interesat",
+    "answer": "Super, ma bucur! E simplu: iti trimit un brief scurt pe email — cam 10 minute sa il completezi — si in 3 pana la 5 zile agentul e live pe numarul tau. Imi dai o adresa de email si pornim de acolo?",
+    "source": "next_step"
+  },
+  {
+    "id": "next_step_en",
+    "language": "en",
+    "question": "How do we start? / I want to try / What are the next steps? / I am interested",
+    "answer": "Great, glad to hear it! It's simple: I'll send you a short brief by email — about 10 minutes to fill in — and in 3 to 5 days the agent is live on your number. Can I get an email address and we'll go from there?",
+    "source": "next_step"
+  },
+  {
+    "id": "invoice_ro",
+    "language": "ro",
+    "question": "Cum primesc factura?",
+    "answer": "Factura se trimite pe email in maximum 24 de ore dupa confirmarea platii.",
+    "source": "billing"
+  },
+  {
+    "id": "invoice_en",
+    "language": "en",
+    "question": "How can I get my invoice?",
+    "answer": "You can receive your invoice by email within 24 hours after payment confirmation.",
+    "source": "billing"
   }
 ]
