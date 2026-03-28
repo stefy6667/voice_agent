@@ -162,7 +162,7 @@ class MockLLMProvider:
                     "Spune-mi ce vrei să obții și ce buget ai în minte, iar eu îți recomand cea mai bună opțiune."
                 )
             return (
-                f"În regulă, te ajut cu asta. Ai spus: „{user_text}". "
+                f"În regulă, te ajut cu asta. Ai spus: \"{user_text}\". "
                 "Dă-mi încă un detaliu scurt și continuăm natural, ca într-o conversație normală."
             )
 
@@ -172,7 +172,7 @@ class MockLLMProvider:
                 "Tell me what outcome you want and the budget you have in mind, and I'll recommend the best fit."
             )
         return (
-            f"Alright, I can help with that. You said: \"{user_text}\". "
+            f"Alright, I can help with that. You said: '{user_text}'. "
             "Give me one more short detail and we'll continue naturally from there."
         )
 
